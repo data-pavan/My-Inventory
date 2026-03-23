@@ -1,0 +1,147 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: userId
+// Fields:
+//   - email: string (required)
+//   - role: string (required, ['admin', 'staff'])
+//
+// Collection: categories
+// Document ID: categoryId
+// Fields:
+//   - name: string (required)
+//   - description: string (optional)
+//
+// Collection: items
+// Document ID: itemId
+// Fields:
+//   - name: string (required)
+//   - categoryId: string (required)
+//   - unit: string (required)
+//   - minStock: number (required)
+//   - currentStock: number (required)
+//
+// Collection: transactions
+// Document ID: transactionId
+// Fields:
+//   - voucherNo: string (required)
+//   - date: string (required, ISO 8601)
+//   - type: string (required, ['IN', 'OUT'])
+//   - itemId: string (required)
+//   - quantity: number (required, positive)
+//   - sourceDestination: string (optional)
+//   - location: string (optional)
+//   - createdBy: string (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         (request.auth.token.email == "data.pavan11@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isStaff() {
+      return isAuthenticated() &&
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff') || isAdmin());
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'staff'];
+    }
+
+    function isValidCategory(data) {
+      return hasOnlyAllowedFields(['name', 'description']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 500));
+    }
+
+    function isValidItem(data) {
+      return hasOnlyAllowedFields(['name', 'categoryId', 'unit', 'minStock', 'currentStock']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.categoryId is string &&
+             data.unit is string && data.unit.size() > 0 &&
+             data.minStock is number && data.minStock >= 0 &&
+             data.currentStock is number;
+    }
+
+    function isValidTransaction(data) {
+      return hasOnlyAllowedFields(['voucherNo', 'date', 'type', 'itemId', 'quantity', 'sourceDestination', 'location', 'createdBy']) &&
+             data.voucherNo is string && data.voucherNo.size() > 0 &&
+             data.date is string &&
+             data.type in ['IN', 'OUT'] &&
+             data.itemId is string &&
+             data.quantity is number && data.quantity > 0 &&
+             (!('sourceDestination' in data) || (data.sourceDestination is string && data.sourceDestination.size() < 200)) &&
+             (!('location' in data) || (data.location is string && data.location.size() < 200)) &&
+             data.createdBy == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+        (request.resource.data.role == 'staff' || 
+         (request.resource.data.role == 'admin' && request.auth.token.email == "data.pavan11@gmail.com") ||
+         isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+        ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidCategory(request.resource.data);
+    }
+
+    match /items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidItem(request.resource.data);
+      allow update: if isAuthenticated() && isValidItem(request.resource.data) && (isAdmin() || (isStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStock'])));
+      allow delete: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow create: if isStaff() && isValidTransaction(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+  }
+}

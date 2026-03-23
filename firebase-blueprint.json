@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "Category": {
+      "title": "Category",
+      "description": "A category for items",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the category" },
+        "description": { "type": "string", "description": "A description of the category" }
+      },
+      "required": ["name"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "An inventory item",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the item" },
+        "categoryId": { "type": "string", "description": "The ID of the category" },
+        "unit": { "type": "string", "description": "The unit of measurement (pcs, kg, etc.)" },
+        "minStock": { "type": "number", "description": "Minimum stock level for alerts" },
+        "currentStock": { "type": "number", "description": "Current stock level (auto-calculated)" }
+      },
+      "required": ["name", "categoryId", "unit", "minStock", "currentStock"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A stock movement transaction",
+      "type": "object",
+      "properties": {
+        "voucherNo": { "type": "string", "description": "Auto-generated voucher number" },
+        "date": { "type": "string", "format": "date-time", "description": "Date of transaction" },
+        "type": { "type": "string", "enum": ["IN", "OUT"], "description": "Transaction type" },
+        "itemId": { "type": "string", "description": "The ID of the item" },
+        "quantity": { "type": "number", "description": "Quantity moved" },
+        "sourceDestination": { "type": "string", "description": "Supplier or Destination" },
+        "location": { "type": "string", "description": "Storage location" },
+        "createdBy": { "type": "string", "description": "User ID who created the transaction" }
+      },
+      "required": ["voucherNo", "date", "type", "itemId", "quantity", "createdBy"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Application user",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "User email" },
+        "role": { "type": "string", "enum": ["admin", "staff"], "description": "User role" }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/categories/{categoryId}": { "schema": "Category", "description": "Collection of categories" },
+    "/items/{itemId}": { "schema": "Item", "description": "Collection of items" },
+    "/transactions/{transactionId}": { "schema": "Transaction", "description": "Collection of transactions" },
+    "/users/{userId}": { "schema": "User", "description": "Collection of users" }
+  }
+}
