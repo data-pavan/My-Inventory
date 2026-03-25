@@ -13,8 +13,6 @@ import {
   Legend
 } from 'recharts';
 import { 
-  TrendingUp, 
-  TrendingDown, 
   AlertTriangle, 
   Package, 
   ArrowRight,
@@ -39,6 +37,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   // Pinned items for overview cards
   const [pinnedItemIds, setPinnedItemIds] = useState<string[]>([]);
   const [isCustomizing, setIsCustomizing] = useState(false);
+  const [overviewCategoryId, setOverviewCategoryId] = useState<string>('all');
 
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
@@ -150,7 +149,16 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
     XLSX.writeFile(wb, `Inventory_Summary_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  const pinnedItems = items.filter(item => pinnedItemIds.includes(item.id));
+  const pinnedItems = items.filter(item => {
+    if (overviewCategoryId === 'all') {
+      return pinnedItemIds.includes(item.id);
+    }
+    return item.categoryId === overviewCategoryId;
+  });
+
+  const globalStats = {
+    lowStockCount: items.filter(item => item.currentStock <= item.minStock).length
+  };
 
   if (loading) return <div className="flex items-center justify-center min-h-[400px]">
     <div className="h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -163,7 +171,17 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
           <p className="text-slate-500">Real-time inventory insights and analytics</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={overviewCategoryId}
+            onChange={(e) => setOverviewCategoryId(e.target.value)}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+          >
+            <option value="all">All Categories</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
           <button 
             onClick={() => setIsCustomizing(!isCustomizing)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors shadow-sm border ${
@@ -183,23 +201,44 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
         </div>
       </div>
 
+      {/* Global Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+              <AlertTriangle size={20} />
+            </div>
+          </div>
+          <p className="text-slate-500 text-sm font-medium">Low Stock Items</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1">{globalStats.lowStockCount}</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2">Requires Attention</p>
+        </div>
+      </div>
+
       {isCustomizing && (
         <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-4 duration-300">
-          <h3 className="text-blue-900 font-bold mb-4">Select items to display as cards on your home page</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-blue-900 font-bold">Select items to display as cards on your home page</h3>
+            <div className="text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded">
+              {overviewCategoryId === 'all' ? 'Showing All Items' : `Showing ${categories.find(c => c.id === overviewCategoryId)?.name}`}
+            </div>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {items.map(item => (
-              <button
-                key={item.id}
-                onClick={() => togglePin(item.id)}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
-                  pinnedItemIds.includes(item.id)
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                }`}
-              >
-                {item.name}
-              </button>
-            ))}
+            {items
+              .filter(item => overviewCategoryId === 'all' || item.categoryId === overviewCategoryId)
+              .map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => togglePin(item.id)}
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                    pinnedItemIds.includes(item.id)
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                  }`}
+                >
+                  {item.name}
+                </button>
+              ))}
           </div>
         </div>
       )}
@@ -209,13 +248,12 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
         {pinnedItems.map(item => {
           const isLow = item.currentStock <= item.minStock;
           const itemTxs = transactions.filter(tx => tx.itemId === item.id);
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          const stockOutToday = itemTxs
-            .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= todayStart.getTime())
+          
+          const stockOutTotal = itemTxs
+            .filter(tx => tx.type === 'OUT')
             .reduce((acc, tx) => acc + tx.quantity, 0);
-          const stockInToday = itemTxs
-            .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= todayStart.getTime())
+          const stockInTotal = itemTxs
+            .filter(tx => tx.type === 'IN')
             .reduce((acc, tx) => acc + tx.quantity, 0);
 
           return (
@@ -238,10 +276,10 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
               <div className="mt-4 pt-4 border-t border-slate-50 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    In Today: <span className="text-emerald-500">{stockInToday}</span>
+                    Total In: <span className="text-emerald-500">{stockInTotal}</span>
                   </div>
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    Out Today: <span className="text-rose-500">{stockOutToday}</span>
+                    Total Out: <span className="text-rose-500">{stockOutTotal}</span>
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-right">
@@ -369,6 +407,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                     const itemMatch = selectedItemId === 'all' 
                       ? (selectedCategoryId === 'all' || items.find(i => i.id === tx.itemId)?.categoryId === selectedCategoryId)
                       : tx.itemId === selectedItemId;
+                    
                     return itemMatch;
                   })
                   .slice(0, 10).map((tx) => (

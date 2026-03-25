@@ -9,7 +9,9 @@ import {
   orderBy, 
   increment,
   runTransaction,
-  Timestamp
+  Timestamp,
+  writeBatch,
+  getDocs
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { Transaction, Item, Category, TransactionType, OperationType } from '../types';
@@ -26,7 +28,10 @@ import {
   Package,
   MapPin,
   User as UserIcon,
-  X
+  X,
+  Trash2,
+  AlertTriangle,
+  Edit2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -36,10 +41,20 @@ export default function Transactions() {
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [modalType, setModalType] = useState<TransactionType>('IN');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
+  const [dateRange, setDateRange] = useState({
+    start: '',
+    end: ''
+  });
+
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'DELETE' | 'CLEAR_ALL';
+    tx?: Transaction;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     itemId: '',
@@ -80,21 +95,8 @@ export default function Transactions() {
     const selectedItem = items.find(i => i.id === formData.itemId);
     if (!selectedItem) return;
 
-    if (modalType === 'OUT' && selectedItem.currentStock < formData.quantity) {
-      return toast.error(`Insufficient stock! Current stock: ${selectedItem.currentStock}`);
-    }
-
     setLoading(true);
     try {
-      const voucherNo = generateVoucherNo();
-      const txData = {
-        ...formData,
-        voucherNo,
-        type: modalType,
-        createdBy: auth.currentUser?.uid,
-        date: new Date(formData.date).toISOString()
-      };
-
       await runTransaction(db, async (transaction) => {
         const itemRef = doc(db, 'items', formData.itemId);
         const itemSnap = await transaction.get(itemRef);
@@ -102,44 +104,149 @@ export default function Transactions() {
         if (!itemSnap.exists()) throw new Error("Item does not exist!");
         
         const currentStock = itemSnap.data().currentStock;
-        const newStock = modalType === 'IN' ? currentStock + formData.quantity : currentStock - formData.quantity;
-        
-        if (newStock < 0) throw new Error("Insufficient stock!");
+        let newStock = currentStock;
 
-        transaction.set(doc(collection(db, 'transactions')), txData);
+        if (editingTransaction) {
+          // Reverse old effect
+          const oldStock = editingTransaction.type === 'IN' 
+            ? currentStock - editingTransaction.quantity 
+            : currentStock + editingTransaction.quantity;
+          
+          // Apply new effect
+          newStock = modalType === 'IN' 
+            ? oldStock + formData.quantity 
+            : oldStock - formData.quantity;
+        } else {
+          newStock = modalType === 'IN' 
+            ? currentStock + formData.quantity 
+            : currentStock - formData.quantity;
+        }
+        
+        if (newStock < 0) throw new Error("Insufficient stock for this operation!");
+
+        if (editingTransaction) {
+          transaction.update(doc(db, 'transactions', editingTransaction.id), {
+            ...formData,
+            date: new Date(formData.date).toISOString()
+          });
+        } else {
+          const voucherNo = generateVoucherNo();
+          const txData = {
+            ...formData,
+            voucherNo,
+            type: modalType,
+            createdBy: auth.currentUser?.uid,
+            date: new Date(formData.date).toISOString()
+          };
+          transaction.set(doc(collection(db, 'transactions')), txData);
+        }
+        
         transaction.update(itemRef, { currentStock: newStock });
       });
 
-      toast.success(`${modalType === 'IN' ? 'Stock In' : 'Stock Out'} recorded successfully`);
+      toast.success(`Transaction ${editingTransaction ? 'updated' : 'recorded'} successfully`);
       closeModal();
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'transactions');
+      handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
     } finally {
       setLoading(false);
     }
   };
 
-  const openModal = (type: TransactionType) => {
+  const openModal = (type: TransactionType, tx?: Transaction) => {
     setModalType(type);
-    setFormData({
-      itemId: '',
-      quantity: 1,
-      invoiceNo: '',
-      sourceDestination: '',
-      location: '',
-      date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
-    });
+    if (tx) {
+      setEditingTransaction(tx);
+      setFormData({
+        itemId: tx.itemId,
+        quantity: tx.quantity,
+        invoiceNo: tx.invoiceNo || '',
+        sourceDestination: tx.sourceDestination || '',
+        location: tx.location || '',
+        date: format(new Date(tx.date), "yyyy-MM-dd'T'HH:mm")
+      });
+    } else {
+      setEditingTransaction(null);
+      setFormData({
+        itemId: '',
+        quantity: 1,
+        invoiceNo: '',
+        sourceDestination: '',
+        location: '',
+        date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
+      });
+    }
     setIsModalOpen(true);
   };
 
-  const closeModal = () => setIsModalOpen(false);
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingTransaction(null);
+  };
+  
+  const executeDelete = async () => {
+    if (!confirmAction?.tx) return;
+    const tx = confirmAction.tx;
+    
+    setLoading(true);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const itemRef = doc(db, 'items', tx.itemId);
+        const itemSnap = await transaction.get(itemRef);
+        
+        if (!itemSnap.exists()) throw new Error("Item does not exist!");
+        
+        const currentStock = itemSnap.data().currentStock;
+        const newStock = tx.type === 'IN' ? currentStock - tx.quantity : currentStock + tx.quantity;
+        
+        if (newStock < 0) throw new Error("Cannot delete this transaction as it would result in negative stock!");
+
+        transaction.delete(doc(db, 'transactions', tx.id));
+        transaction.update(itemRef, { currentStock: newStock });
+      });
+      toast.success('Transaction deleted successfully');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `transactions/${tx.id}`);
+    } finally {
+      setLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const executeClearAll = async () => {
+    setLoading(true);
+    try {
+      const batch = writeBatch(db);
+      const txSnap = await getDocs(collection(db, 'transactions'));
+      txSnap.docs.forEach(doc => batch.delete(doc.ref));
+      
+      const itemsSnap = await getDocs(collection(db, 'items'));
+      itemsSnap.docs.forEach(doc => {
+        const data = doc.data();
+        batch.update(doc.ref, { currentStock: data.initialStock || 0 });
+      });
+      
+      await batch.commit();
+      toast.success('All transactions cleared');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'transactions');
+    } finally {
+      setLoading(false);
+      setConfirmAction(null);
+    }
+  };
 
   const filteredTransactions = transactions.filter(tx => {
     const item = items.find(i => i.id === tx.itemId);
     const matchesSearch = item?.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          tx.voucherNo.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'ALL' || tx.type === filterType;
-    return matchesSearch && matchesType;
+    
+    const txDate = new Date(tx.date).getTime();
+    const matchesStart = !dateRange.start || txDate >= new Date(dateRange.start).getTime();
+    const matchesEnd = !dateRange.end || txDate <= new Date(dateRange.end).setHours(23, 59, 59, 999);
+    
+    return matchesSearch && matchesType && matchesStart && matchesEnd;
   });
 
   const exportToExcel = () => {
@@ -196,6 +303,15 @@ export default function Transactions() {
             <Download size={18} />
             <span>Export Excel</span>
           </button>
+          {transactions.length > 0 && (
+            <button 
+              onClick={() => setConfirmAction({ type: 'CLEAR_ALL' })}
+              className="flex items-center gap-2 bg-white border border-rose-200 px-4 py-2 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors shadow-sm"
+            >
+              <AlertTriangle size={18} />
+              <span>Clear All</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -211,17 +327,35 @@ export default function Transactions() {
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter size={18} className="text-slate-400" />
-          <select 
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
-          >
-            <option value="ALL">All Types</option>
-            <option value="IN">Stock IN</option>
-            <option value="OUT">Stock OUT</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <CalendarIcon size={18} className="text-slate-400" />
+            <input 
+              type="date"
+              value={dateRange.start}
+              onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+            />
+            <span className="text-slate-400">to</span>
+            <input 
+              type="date"
+              value={dateRange.end}
+              onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter size={18} className="text-slate-400" />
+            <select 
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+            >
+              <option value="ALL">All Types</option>
+              <option value="IN">Stock IN</option>
+              <option value="OUT">Stock OUT</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -238,6 +372,7 @@ export default function Transactions() {
                 <th className="px-6 py-4 font-semibold">Item</th>
                 <th className="px-6 py-4 font-semibold">Quantity</th>
                 <th className="px-6 py-4 font-semibold">Source/Dest</th>
+                <th className="px-6 py-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -271,6 +406,24 @@ export default function Transactions() {
                     <td className="px-6 py-4 text-sm text-slate-600 truncate max-w-[150px]">
                       {tx.sourceDestination || '-'}
                     </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button 
+                          onClick={() => openModal(tx.type, tx)}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit Transaction"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => setConfirmAction({ type: 'DELETE', tx })}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Delete Transaction"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -301,9 +454,9 @@ export default function Transactions() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">
-                    Material {modalType} Entry
+                    Material {modalType} {editingTransaction ? 'Edit' : 'Entry'}
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium">Voucher: {generateVoucherNo()}</p>
+                  <p className="text-xs text-slate-500 font-medium">Voucher: {editingTransaction ? editingTransaction.voucherNo : generateVoucherNo()}</p>
                 </div>
               </div>
               <button onClick={closeModal} className="text-slate-400 hover:text-slate-600">
@@ -319,9 +472,10 @@ export default function Transactions() {
                     <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <select
                       required
+                      disabled={!!editingTransaction}
                       value={formData.itemId}
                       onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-white"
+                      className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-white disabled:bg-slate-50"
                     >
                       <option value="">Choose an item...</option>
                       {items.map(item => (
@@ -418,12 +572,48 @@ export default function Transactions() {
                   ) : (
                     <>
                       <Plus size={18} />
-                      Submit {modalType}
+                      {editingTransaction ? 'Update' : 'Submit'} {modalType}
                     </>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">
+                {confirmAction.type === 'DELETE' ? 'Delete Transaction' : 'Clear All Transactions'}
+              </h3>
+              <p className="text-slate-500 mb-6">
+                {confirmAction.type === 'DELETE' 
+                  ? `Are you sure you want to delete transaction ${confirmAction.tx?.voucherNo}? This will adjust the item stock accordingly.`
+                  : 'This will delete ALL transaction history and reset all stock levels to their initial values. This cannot be undone.'}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmAction.type === 'DELETE' ? executeDelete : executeClearAll}
+                  disabled={loading}
+                  className="flex-1 bg-rose-600 text-white font-semibold py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Processing...' : 'Confirm'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
