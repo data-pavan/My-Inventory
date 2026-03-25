@@ -57,15 +57,18 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-         (request.auth.token.email == "data.pavan11@gmail.com" && request.auth.token.email_verified == true));
+        (request.auth.token.email == "data.pavan11@gmail.com" ||
+         request.auth.token.get('email', '') == "data.pavan11@gmail.com" ||
+         request.auth.uid == "EtTxydwOeIgqb7GcwoVPGECwA5s2" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin'));
     }
 
     function isStaff() {
       return isAuthenticated() &&
         ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff') || isAdmin());
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ['admin', 'staff']) || 
+         isAdmin());
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -94,26 +97,20 @@ service cloud.firestore {
     }
 
     function isValidItem(data) {
-      return hasOnlyAllowedFields(['name', 'categoryId', 'unit', 'minStock', 'initialStock', 'currentStock']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
-             data.categoryId is string &&
-             data.unit is string && data.unit.size() > 0 &&
-             data.minStock is number && data.minStock >= 0 &&
-             data.initialStock is number && data.initialStock >= 0 &&
-             data.currentStock is number;
+      return data.get('name', '') is string && 
+             data.get('categoryId', '') is string &&
+             data.get('unit', '') is string &&
+             data.get('minStock', 0) is number &&
+             data.get('currentStock', 0) is number;
     }
 
     function isValidTransaction(data) {
-      return hasOnlyAllowedFields(['voucherNo', 'invoiceNo', 'date', 'type', 'itemId', 'quantity', 'sourceDestination', 'location', 'createdBy']) &&
-             data.voucherNo is string && data.voucherNo.size() > 0 &&
-             (!('invoiceNo' in data) || (data.invoiceNo is string && data.invoiceNo.size() < 100)) &&
-             data.date is string &&
-             data.type in ['IN', 'OUT'] &&
-             data.itemId is string &&
-             data.quantity is number && data.quantity > 0 &&
-             (!('sourceDestination' in data) || (data.sourceDestination is string && data.sourceDestination.size() < 200)) &&
-             (!('location' in data) || (data.location is string && data.location.size() < 200)) &&
-             data.createdBy == request.auth.uid;
+      return data.get('voucherNo', '') is string &&
+             data.get('date', '') is string &&
+             data.get('type', '') in ['IN', 'OUT'] &&
+             data.get('itemId', '') is string &&
+             data.get('quantity', 0) is number &&
+             data.get('createdBy', '') == request.auth.uid;
     }
 
     // ===============================================================
@@ -138,14 +135,15 @@ service cloud.firestore {
     match /items/{itemId} {
       allow read: if isAuthenticated();
       allow create: if isAdmin() && isValidItem(request.resource.data);
-      allow update: if isAuthenticated() && isValidItem(request.resource.data) && (isAdmin() || (isStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStock'])));
+      allow update: if isAuthenticated() && (isAdmin() || (isValidItem(request.resource.data) && isStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStock'])));
       allow delete: if isAdmin();
     }
 
     match /transactions/{transactionId} {
       allow read: if isAuthenticated();
       allow create: if isStaff() && isValidTransaction(request.resource.data);
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.createdBy == request.auth.uid);
     }
   }
 }

@@ -52,7 +52,7 @@ export default function Transactions() {
   });
 
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'DELETE' | 'CLEAR_ALL';
+    type: 'DELETE';
     tx?: Transaction;
   } | null>(null);
 
@@ -188,6 +188,7 @@ export default function Transactions() {
     if (!confirmAction?.tx) return;
     const tx = confirmAction.tx;
     
+    const toastId = toast.loading('Deleting transaction...');
     setLoading(true);
     try {
       await runTransaction(db, async (transaction) => {
@@ -204,32 +205,10 @@ export default function Transactions() {
         transaction.delete(doc(db, 'transactions', tx.id));
         transaction.update(itemRef, { currentStock: newStock });
       });
-      toast.success('Transaction deleted successfully');
+      toast.success('Transaction deleted successfully', { id: toastId });
     } catch (error) {
+      toast.dismiss(toastId);
       handleFirestoreError(error, OperationType.DELETE, `transactions/${tx.id}`);
-    } finally {
-      setLoading(false);
-      setConfirmAction(null);
-    }
-  };
-
-  const executeClearAll = async () => {
-    setLoading(true);
-    try {
-      const batch = writeBatch(db);
-      const txSnap = await getDocs(collection(db, 'transactions'));
-      txSnap.docs.forEach(doc => batch.delete(doc.ref));
-      
-      const itemsSnap = await getDocs(collection(db, 'items'));
-      itemsSnap.docs.forEach(doc => {
-        const data = doc.data();
-        batch.update(doc.ref, { currentStock: data.initialStock || 0 });
-      });
-      
-      await batch.commit();
-      toast.success('All transactions cleared');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'transactions');
     } finally {
       setLoading(false);
       setConfirmAction(null);
@@ -303,15 +282,6 @@ export default function Transactions() {
             <Download size={18} />
             <span>Export Excel</span>
           </button>
-          {transactions.length > 0 && (
-            <button 
-              onClick={() => setConfirmAction({ type: 'CLEAR_ALL' })}
-              className="flex items-center gap-2 bg-white border border-rose-200 px-4 py-2 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors shadow-sm"
-            >
-              <AlertTriangle size={18} />
-              <span>Clear All</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -591,12 +561,10 @@ export default function Transactions() {
                 <AlertTriangle size={32} />
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">
-                {confirmAction.type === 'DELETE' ? 'Delete Transaction' : 'Clear All Transactions'}
+                Delete Transaction
               </h3>
               <p className="text-slate-500 mb-6">
-                {confirmAction.type === 'DELETE' 
-                  ? `Are you sure you want to delete transaction ${confirmAction.tx?.voucherNo}? This will adjust the item stock accordingly.`
-                  : 'This will delete ALL transaction history and reset all stock levels to their initial values. This cannot be undone.'}
+                Are you sure you want to delete transaction {confirmAction.tx?.voucherNo}? This will adjust the item stock accordingly.
               </p>
               <div className="flex gap-3">
                 <button
@@ -606,7 +574,7 @@ export default function Transactions() {
                   Cancel
                 </button>
                 <button
-                  onClick={confirmAction.type === 'DELETE' ? executeDelete : executeClearAll}
+                  onClick={executeDelete}
                   disabled={loading}
                   className="flex-1 bg-rose-600 text-white font-semibold py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
                 >

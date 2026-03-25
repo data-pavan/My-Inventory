@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Item, Category, OperationType } from '../types';
 import { handleFirestoreError } from '../utils/error-handler';
@@ -81,25 +81,6 @@ export default function ItemManagement() {
     }
   };
 
-  const handleDeleteAll = async () => {
-    if (!window.confirm('WARNING: This will delete ALL items and their stock information. This action cannot be undone. Are you sure?')) return;
-    
-    setLoading(true);
-    try {
-      const batch = writeBatch(db);
-      const itemsSnap = await getDocs(collection(db, 'items'));
-      itemsSnap.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-      toast.success('All items deleted successfully');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'items');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const openModal = (item?: Item) => {
     if (item) {
       setEditingItem(item);
@@ -138,15 +119,6 @@ export default function ItemManagement() {
           <p className="text-slate-500">Manage your inventory items and stock levels</p>
         </div>
         <div className="flex gap-3">
-          {items.length > 0 && (
-            <button 
-              onClick={handleDeleteAll}
-              className="flex items-center gap-2 bg-white border border-rose-200 text-rose-600 px-4 py-2 rounded-lg hover:bg-rose-50 transition-colors shadow-sm"
-            >
-              <Trash2 size={20} />
-              <span>Delete All</span>
-            </button>
-          )}
           <button 
             onClick={() => openModal()}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
