@@ -22,7 +22,7 @@ import {
   Search, 
   Filter, 
   Download, 
-  Calendar,
+  Calendar as CalendarIcon,
   Package,
   MapPin,
   User as UserIcon,
@@ -44,6 +44,7 @@ export default function Transactions() {
   const [formData, setFormData] = useState({
     itemId: '',
     quantity: 1,
+    invoiceNo: '',
     sourceDestination: '',
     location: '',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
@@ -123,6 +124,7 @@ export default function Transactions() {
     setFormData({
       itemId: '',
       quantity: 1,
+      invoiceNo: '',
       sourceDestination: '',
       location: '',
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
@@ -146,6 +148,7 @@ export default function Transactions() {
       const category = categories.find(c => c.id === item?.categoryId);
       return {
         'Voucher No': tx.voucherNo,
+        'Invoice/PI No': tx.invoiceNo || '-',
         'Date': format(new Date(tx.date), 'yyyy-MM-dd HH:mm'),
         'Type': tx.type,
         'Item Name': item?.name || 'Unknown',
@@ -229,6 +232,7 @@ export default function Transactions() {
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                 <th className="px-6 py-4 font-semibold">Voucher No</th>
+                <th className="px-6 py-4 font-semibold">Invoice/PI</th>
                 <th className="px-6 py-4 font-semibold">Date</th>
                 <th className="px-6 py-4 font-semibold">Type</th>
                 <th className="px-6 py-4 font-semibold">Item</th>
@@ -242,6 +246,7 @@ export default function Transactions() {
                 return (
                   <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-bold text-slate-900">{tx.voucherNo}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 font-medium">{tx.invoiceNo || '-'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {format(new Date(tx.date), 'MMM dd, yyyy HH:mm')}
                     </td>
@@ -329,6 +334,17 @@ export default function Transactions() {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Invoice / PI No</label>
+                  <input
+                    type="text"
+                    value={formData.invoiceNo}
+                    onChange={(e) => setFormData({ ...formData, invoiceNo: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="e.g. INV-2024-001"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Quantity</label>
                   <input
                     type="number"
@@ -343,7 +359,7 @@ export default function Transactions() {
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Date & Time</label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                       type="datetime-local"
                       required

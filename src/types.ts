@@ -12,12 +12,14 @@ export interface Item {
   categoryId: string;
   unit: string;
   minStock: number;
+  initialStock: number;
   currentStock: number;
 }
 
 export interface Transaction {
   id: string;
   voucherNo: string;
+  invoiceNo?: string;
   date: string;
   type: TransactionType;
   itemId: string;

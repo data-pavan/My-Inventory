@@ -123,7 +123,6 @@ export default function StockTable() {
                 <th className="px-6 py-4 font-semibold">Item Name</th>
                 <th className="px-6 py-4 font-semibold">Category</th>
                 <th className="px-6 py-4 font-semibold">Current Stock</th>
-                <th className="px-6 py-4 font-semibold">Min Stock</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
               </tr>
             </thead>
@@ -151,9 +150,6 @@ export default function StockTable() {
                         </span>
                         <span className="text-xs text-slate-400 font-medium">{item.unit}</span>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
-                      {item.minStock} {item.unit}
                     </td>
                     <td className="px-6 py-4">
                       {isLow ? (

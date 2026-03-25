@@ -16,6 +16,7 @@ export default function ItemManagement() {
     categoryId: '',
     unit: 'pcs',
     minStock: 10,
+    initialStock: 0,
     currentStock: 0
   });
   const [loading, setLoading] = useState(false);
@@ -42,11 +43,24 @@ export default function ItemManagement() {
     setLoading(true);
     try {
       if (editingItem) {
-        const { currentStock, ...updateData } = formData;
+        // Calculate the difference in initial stock to adjust current stock
+        const initialStockDiff = formData.initialStock - editingItem.initialStock;
+        const newCurrentStock = editingItem.currentStock + initialStockDiff;
+        
+        const updateData = {
+          ...formData,
+          currentStock: newCurrentStock
+        };
+        
         await updateDoc(doc(db, 'items', editingItem.id), updateData);
         toast.success('Item updated successfully');
       } else {
-        await addDoc(collection(db, 'items'), formData);
+        // For new items, current stock starts as initial stock
+        const newItemData = {
+          ...formData,
+          currentStock: formData.initialStock
+        };
+        await addDoc(collection(db, 'items'), newItemData);
         toast.success('Item added successfully');
       }
       closeModal();
@@ -75,6 +89,7 @@ export default function ItemManagement() {
         categoryId: item.categoryId,
         unit: item.unit,
         minStock: item.minStock,
+        initialStock: item.initialStock || 0,
         currentStock: item.currentStock
       });
     } else {
@@ -84,6 +99,7 @@ export default function ItemManagement() {
         categoryId: categories[0]?.id || '',
         unit: 'pcs',
         minStock: 10,
+        initialStock: 0,
         currentStock: 0
       });
     }
@@ -144,10 +160,7 @@ export default function ItemManagement() {
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
                       <span className={`font-bold ${isLowStock ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {item.currentStock}
-                      </span>
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-                        Min: {item.minStock}
+                        {item.currentStock} {item.unit}
                       </span>
                     </div>
                   </td>
@@ -255,24 +268,22 @@ export default function ItemManagement() {
                     required
                     min="0"
                     value={formData.minStock}
-                    onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) || 0 })}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                   />
                 </div>
 
-                {!editingItem && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Initial Stock</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={formData.currentStock}
-                      onChange={(e) => setFormData({ ...formData, currentStock: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Initial Stock</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={formData.initialStock}
+                    onChange={(e) => setFormData({ ...formData, initialStock: parseInt(e.target.value) || 0 })}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">

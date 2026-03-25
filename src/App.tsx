@@ -77,12 +77,12 @@ export default function App() {
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard': return <Dashboard />;
+      case 'dashboard': return <Dashboard setView={setCurrentView} />;
       case 'categories': return <CategoryManagement />;
       case 'items': return <ItemManagement />;
       case 'transactions': return <Transactions />;
       case 'stock': return <StockTable />;
-      default: return <Dashboard />;
+      default: return <Dashboard setView={setCurrentView} />;
     }
   };
 

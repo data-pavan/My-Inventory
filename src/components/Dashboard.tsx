@@ -26,15 +26,32 @@ import { Item, Transaction, Category } from '../types';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
-export default function Dashboard() {
+export default function Dashboard({ setView }: { setView: (view: string) => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filters
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+  const [selectedItemId, setSelectedItemId] = useState<string>('all');
+  
+  // Pinned items for overview cards
+  const [pinnedItemIds, setPinnedItemIds] = useState<string[]>([]);
+  const [isCustomizing, setIsCustomizing] = useState(false);
 
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
-      setItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item)));
+      const fetchedItems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
+      setItems(fetchedItems);
+      
+      // Initialize pinned items if empty
+      const savedPinned = localStorage.getItem('pinnedItemIds');
+      if (savedPinned) {
+        setPinnedItemIds(JSON.parse(savedPinned));
+      } else if (fetchedItems.length > 0) {
+        setPinnedItemIds(fetchedItems.slice(0, 4).map(i => i.id));
+      }
     });
 
     const unsubTransactions = onSnapshot(
@@ -56,17 +73,20 @@ export default function Dashboard() {
     };
   }, []);
 
-  const lowStockItems = items.filter(item => item.currentStock <= item.minStock);
-  const totalStock = items.reduce((acc, item) => acc + item.currentStock, 0);
+  const togglePin = (id: string) => {
+    const newPinned = pinnedItemIds.includes(id)
+      ? pinnedItemIds.filter(pid => pid !== id)
+      : [...pinnedItemIds, id];
+    setPinnedItemIds(newPinned);
+    localStorage.setItem('pinnedItemIds', JSON.stringify(newPinned));
+  };
 
-  // Calculate Stock Out Today
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const stockOutToday = transactions
-    .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= todayStart.getTime())
-    .reduce((acc, tx) => acc + tx.quantity, 0);
+  const filteredItemsForChart = items.filter(item => {
+    const catMatch = selectedCategoryId === 'all' || item.categoryId === selectedCategoryId;
+    const itemMatch = selectedItemId === 'all' || item.id === selectedItemId;
+    return catMatch && itemMatch;
+  });
 
-  // Prepare data for Bar Chart (Transactions last 7 days)
   const last7Days = [...Array(7)].map((_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - i);
@@ -80,13 +100,31 @@ export default function Dashboard() {
     
     const dayTxs = transactions.filter(tx => {
       const txDate = new Date(tx.date).getTime();
-      return txDate >= dayStart && txDate <= dayEnd;
+      const dateMatch = txDate >= dayStart && txDate <= dayEnd;
+      const itemMatch = selectedItemId === 'all' 
+        ? (selectedCategoryId === 'all' || items.find(i => i.id === tx.itemId)?.categoryId === selectedCategoryId)
+        : tx.itemId === selectedItemId;
+      return dateMatch && itemMatch;
     });
+
+    const inBreakdown = dayTxs.filter(tx => tx.type === 'IN').reduce((acc: any, tx) => {
+      const itemName = items.find(i => i.id === tx.itemId)?.name || 'Unknown';
+      acc[itemName] = (acc[itemName] || 0) + tx.quantity;
+      return acc;
+    }, {});
+
+    const outBreakdown = dayTxs.filter(tx => tx.type === 'OUT').reduce((acc: any, tx) => {
+      const itemName = items.find(i => i.id === tx.itemId)?.name || 'Unknown';
+      acc[itemName] = (acc[itemName] || 0) + tx.quantity;
+      return acc;
+    }, {});
 
     return {
       name: dayName,
       in: dayTxs.filter(tx => tx.type === 'IN').reduce((acc, tx) => acc + tx.quantity, 0),
       out: dayTxs.filter(tx => tx.type === 'OUT').reduce((acc, tx) => acc + tx.quantity, 0),
+      inBreakdown,
+      outBreakdown
     };
   });
 
@@ -112,7 +150,11 @@ export default function Dashboard() {
     XLSX.writeFile(wb, `Inventory_Summary_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (loading) return <div>Loading...</div>;
+  const pinnedItems = items.filter(item => pinnedItemIds.includes(item.id));
+
+  if (loading) return <div className="flex items-center justify-center min-h-[400px]">
+    <div className="h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+  </div>;
 
   return (
     <div className="space-y-8">
@@ -121,65 +163,136 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
           <p className="text-slate-500">Real-time inventory insights and analytics</p>
         </div>
-        <button 
-          onClick={exportToExcel}
-          className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
-        >
-          <Download size={18} />
-          <span>Export Summary</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsCustomizing(!isCustomizing)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors shadow-sm border ${
+              isCustomizing ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <Package size={18} />
+            <span>{isCustomizing ? 'Finish Customizing' : 'Select Items to Show'}</span>
+          </button>
+          <button 
+            onClick={exportToExcel}
+            className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <Download size={18} />
+            <span>Export Summary</span>
+          </button>
+        </div>
       </div>
 
-      {/* Stats Grid */}
+      {isCustomizing && (
+        <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-4 duration-300">
+          <h3 className="text-blue-900 font-bold mb-4">Select items to display as cards on your home page</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {items.map(item => (
+              <button
+                key={item.id}
+                onClick={() => togglePin(item.id)}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  pinnedItemIds.includes(item.id)
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                }`}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stats Grid - Product Wise Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="bg-blue-50 p-3 rounded-xl text-blue-600">
-              <Package size={24} />
-            </div>
-          </div>
-          <h3 className="text-slate-500 text-sm font-medium">Total Items</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{items.length}</p>
-        </div>
+        {pinnedItems.map(item => {
+          const isLow = item.currentStock <= item.minStock;
+          const itemTxs = transactions.filter(tx => tx.itemId === item.id);
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const stockOutToday = itemTxs
+            .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= todayStart.getTime())
+            .reduce((acc, tx) => acc + tx.quantity, 0);
+          const stockInToday = itemTxs
+            .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= todayStart.getTime())
+            .reduce((acc, tx) => acc + tx.quantity, 0);
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="bg-emerald-50 p-3 rounded-xl text-emerald-600">
-              <TrendingUp size={24} />
+          return (
+            <div key={item.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative group">
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-3 rounded-xl ${isLow ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
+                  <Package size={24} />
+                </div>
+                {isLow && (
+                  <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-full uppercase tracking-wider">
+                    Low Stock
+                  </span>
+                )}
+              </div>
+              <h3 className="text-slate-500 text-sm font-medium truncate pr-4">{item.name}</h3>
+              <div className="flex items-baseline gap-2 mt-1">
+                <p className="text-2xl font-bold text-slate-900">{item.currentStock}</p>
+                <span className="text-xs text-slate-400 font-medium">{item.unit}</span>
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-50 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    In Today: <span className="text-emerald-500">{stockInToday}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    Out Today: <span className="text-rose-500">{stockOutToday}</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-right">
+                  {categories.find(c => c.id === item.categoryId)?.name}
+                </div>
+              </div>
             </div>
-            <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">Active</span>
+          );
+        })}
+        {pinnedItems.length === 0 && !isCustomizing && (
+          <div className="col-span-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
+            <Package className="mx-auto text-slate-300 mb-4" size={48} />
+            <h3 className="text-slate-900 font-bold">No items selected for overview</h3>
+            <p className="text-slate-500 text-sm mt-1">Click "Select Items to Show" to customize your dashboard</p>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium">Total Stock</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{totalStock}</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="bg-amber-50 p-3 rounded-xl text-amber-600">
-              <AlertTriangle size={24} />
-            </div>
-            <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded-full">{lowStockItems.length} Items</span>
-          </div>
-          <h3 className="text-slate-500 text-sm font-medium">Low Stock Alerts</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{lowStockItems.length}</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="bg-rose-50 p-3 rounded-xl text-rose-600">
-              <TrendingDown size={24} />
-            </div>
-            <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-full">Today</span>
-          </div>
-          <h3 className="text-slate-500 text-sm font-medium">Stock Out</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{stockOutToday}</p>
-        </div>
+        )}
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">Stock Movement (Weekly)</h3>
+      <div className="grid grid-cols-1 gap-8">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <h3 className="text-lg font-bold text-slate-900">Stock Movement (Weekly)</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={selectedCategoryId}
+                onChange={(e) => {
+                  setSelectedCategoryId(e.target.value);
+                  setSelectedItemId('all');
+                }}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+              <select
+                value={selectedItemId}
+                onChange={(e) => setSelectedItemId(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Products</option>
+                {items
+                  .filter(i => selectedCategoryId === 'all' || i.categoryId === selectedCategoryId)
+                  .map(item => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+              </select>
+            </div>
+          </div>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData}>
@@ -187,39 +300,42 @@ export default function Dashboard() {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748B', fontSize: 12}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748B', fontSize: 12}} />
                 <Tooltip 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-white p-4 rounded-xl shadow-xl border border-slate-100 min-w-[200px]">
+                          <p className="font-bold text-slate-900 mb-2">{label}</p>
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Stock IN: {data.in}</p>
+                              {Object.entries(data.inBreakdown).map(([name, qty]: any) => (
+                                <p key={name} className="text-[11px] text-slate-600 flex justify-between">
+                                  <span>{name}</span>
+                                  <span className="font-medium">{qty}</span>
+                                </p>
+                              ))}
+                            </div>
+                            <div className="pt-2 border-t border-slate-50">
+                              <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">Stock OUT: {data.out}</p>
+                              {Object.entries(data.outBreakdown).map(([name, qty]: any) => (
+                                <p key={name} className="text-[11px] text-slate-600 flex justify-between">
+                                  <span>{name}</span>
+                                  <span className="font-medium">{qty}</span>
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
                 />
                 <Legend iconType="circle" wrapperStyle={{paddingTop: '20px'}} />
                 <Bar dataKey="in" name="Stock IN" fill="#2563EB" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="out" name="Stock OUT" fill="#EF4444" radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">Category Distribution</h3>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                />
-                <Legend verticalAlign="bottom" height={36} />
-              </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -230,7 +346,10 @@ export default function Dashboard() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-900">Recent Transactions</h3>
-            <button className="text-blue-600 text-sm font-semibold hover:text-blue-700 flex items-center gap-1">
+            <button 
+              onClick={() => setView('transactions')}
+              className="text-blue-600 text-sm font-semibold hover:text-blue-700 flex items-center gap-1"
+            >
               View All <ArrowRight size={16} />
             </button>
           </div>
@@ -245,8 +364,19 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {transactions.slice(0, 10).map((tx) => (
-                  <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
+                {transactions
+                  .filter(tx => {
+                    const itemMatch = selectedItemId === 'all' 
+                      ? (selectedCategoryId === 'all' || items.find(i => i.id === tx.itemId)?.categoryId === selectedCategoryId)
+                      : tx.itemId === selectedItemId;
+                    return itemMatch;
+                  })
+                  .slice(0, 10).map((tx) => (
+                  <tr 
+                    key={tx.id} 
+                    onClick={() => setView('transactions')}
+                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
                     <td className="px-6 py-4 text-sm font-medium text-slate-900">{tx.voucherNo}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {items.find(i => i.id === tx.itemId)?.name || 'Unknown Item'}
@@ -270,11 +400,18 @@ export default function Dashboard() {
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-900">Low Stock Alerts</h3>
             <span className="bg-rose-100 text-rose-800 text-xs font-bold px-2.5 py-1 rounded-full">
-              {lowStockItems.length} Critical
+              {items.filter(item => item.currentStock <= item.minStock).length} Critical
             </span>
           </div>
           <div className="p-6 space-y-4">
-            {lowStockItems.slice(0, 5).map((item) => (
+            {items
+              .filter(item => item.currentStock <= item.minStock)
+              .filter(item => {
+                const catMatch = selectedCategoryId === 'all' || item.categoryId === selectedCategoryId;
+                const itemMatch = selectedItemId === 'all' || item.id === selectedItemId;
+                return catMatch && itemMatch;
+              })
+              .slice(0, 5).map((item) => (
               <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="flex items-center gap-3">
                   <div className="bg-white p-2 rounded-lg shadow-sm">
@@ -282,7 +419,6 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-900">{item.name}</h4>
-                    <p className="text-xs text-slate-500">Min: {item.minStock} {item.unit}</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -291,7 +427,7 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
-            {lowStockItems.length === 0 && (
+            {items.filter(item => item.currentStock <= item.minStock).length === 0 && (
               <div className="text-center py-8">
                 <p className="text-slate-400 italic">All stock levels are healthy</p>
               </div>

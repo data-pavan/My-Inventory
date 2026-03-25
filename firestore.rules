@@ -21,12 +21,14 @@
 //   - categoryId: string (required)
 //   - unit: string (required)
 //   - minStock: number (required)
+//   - initialStock: number (required)
 //   - currentStock: number (required)
 //
 // Collection: transactions
 // Document ID: transactionId
 // Fields:
 //   - voucherNo: string (required)
+//   - invoiceNo: string (optional)
 //   - date: string (required, ISO 8601)
 //   - type: string (required, ['IN', 'OUT'])
 //   - itemId: string (required)
@@ -92,17 +94,19 @@ service cloud.firestore {
     }
 
     function isValidItem(data) {
-      return hasOnlyAllowedFields(['name', 'categoryId', 'unit', 'minStock', 'currentStock']) &&
+      return hasOnlyAllowedFields(['name', 'categoryId', 'unit', 'minStock', 'initialStock', 'currentStock']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
              data.categoryId is string &&
              data.unit is string && data.unit.size() > 0 &&
              data.minStock is number && data.minStock >= 0 &&
+             data.initialStock is number && data.initialStock >= 0 &&
              data.currentStock is number;
     }
 
     function isValidTransaction(data) {
-      return hasOnlyAllowedFields(['voucherNo', 'date', 'type', 'itemId', 'quantity', 'sourceDestination', 'location', 'createdBy']) &&
+      return hasOnlyAllowedFields(['voucherNo', 'invoiceNo', 'date', 'type', 'itemId', 'quantity', 'sourceDestination', 'location', 'createdBy']) &&
              data.voucherNo is string && data.voucherNo.size() > 0 &&
+             (!('invoiceNo' in data) || (data.invoiceNo is string && data.invoiceNo.size() < 100)) &&
              data.date is string &&
              data.type in ['IN', 'OUT'] &&
              data.itemId is string &&
