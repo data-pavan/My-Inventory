@@ -290,6 +290,7 @@ export default function ItemManagement() {
                       className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-white"
                     >
                       <option value="pcs">Pieces (pcs)</option>
+                      <option value="pair">Pairs (pair)</option>
                       <option value="kg">Kilograms (kg)</option>
                       <option value="meter">Meters (m)</option>
                       <option value="liter">Liters (l)</option>
