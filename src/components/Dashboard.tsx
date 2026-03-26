@@ -318,8 +318,38 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
         <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-blue-900 font-bold">Select items to display as cards on your home page</h3>
-            <div className="text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded">
-              {overviewCategoryId === 'all' ? 'Showing All Items' : `Showing ${categories.find(c => c.id === overviewCategoryId)?.name}`}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const allIds = items
+                      .filter(item => overviewCategoryId === 'all' || item.categoryId === overviewCategoryId)
+                      .map(i => i.id);
+                    const newPinned = Array.from(new Set([...pinnedItemIds, ...allIds]));
+                    setPinnedItemIds(newPinned);
+                    localStorage.setItem('pinnedItemIds', JSON.stringify(newPinned));
+                  }}
+                  className="text-[10px] font-bold uppercase tracking-wider text-blue-600 hover:text-blue-700 bg-blue-100 px-2 py-1 rounded"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => {
+                    const currentCategoryIds = items
+                      .filter(item => overviewCategoryId === 'all' || item.categoryId === overviewCategoryId)
+                      .map(i => i.id);
+                    const newPinned = pinnedItemIds.filter(id => !currentCategoryIds.includes(id));
+                    setPinnedItemIds(newPinned);
+                    localStorage.setItem('pinnedItemIds', JSON.stringify(newPinned));
+                  }}
+                  className="text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-600 bg-slate-200 px-2 py-1 rounded"
+                >
+                  Deselect All
+                </button>
+              </div>
+              <div className="text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded">
+                {overviewCategoryId === 'all' ? 'Showing All Items' : `Showing ${categories.find(c => c.id === overviewCategoryId)?.name}`}
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
