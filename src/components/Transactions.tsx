@@ -795,8 +795,8 @@ export default function Transactions() {
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className={`p-6 border-b border-slate-100 flex items-center justify-between ${
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
+            <div className={`p-6 border-b border-slate-100 flex items-center justify-between shrink-0 ${
               modalType === 'IN' ? 'bg-emerald-50' : 
               modalType === 'OUT' ? 'bg-rose-50' :
               'bg-amber-50'
@@ -833,9 +833,10 @@ export default function Transactions() {
                   }
                 }
               }}
-              className="p-6 space-y-6"
+              className="flex-1 flex flex-col min-h-0"
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">Invoice / PI No</label>
@@ -1003,8 +1004,9 @@ export default function Transactions() {
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="flex flex-row-reverse gap-3 pt-4">
+            <div className="flex flex-row-reverse gap-3 p-6 border-t border-slate-100 bg-slate-50 shrink-0">
                 <button
                   type="submit"
                   disabled={loading}
@@ -1019,14 +1021,14 @@ export default function Transactions() {
                   ) : (
                     <>
                       <Plus size={18} />
-                      {editingTransaction ? 'Update' : 'Submit'} {modalType}
+                      {editingTransaction ? 'Update' : 'Confirm'} {modalType}
                     </>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                  className="flex-1 px-6 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
