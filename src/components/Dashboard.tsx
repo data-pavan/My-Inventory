@@ -253,13 +253,13 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   </div>;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
-          <p className="text-slate-500">Real-time inventory insights and analytics</p>
+          <h1 className="text-xl font-bold text-slate-900">Dashboard Overview</h1>
+          <p className="text-xs text-slate-500">Real-time inventory insights and analytics</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={overviewCategoryId}
             onChange={(e) => setOverviewCategoryId(e.target.value)}
@@ -290,27 +290,27 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       </div>
 
       {/* Global Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
-              <AlertTriangle size={20} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-2">
+            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
+              <AlertTriangle size={18} />
             </div>
           </div>
-          <p className="text-slate-500 text-sm font-medium">Low Stock Items</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{globalStats.lowStockCount}</p>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2">Requires Attention</p>
+          <p className="text-slate-500 text-xs font-medium">Low Stock Items</p>
+          <p className="text-xl font-bold text-slate-900 mt-0.5">{globalStats.lowStockCount}</p>
+          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">Requires Attention</p>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
-              <Clock size={20} />
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-2">
+            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
+              <Clock size={18} />
             </div>
           </div>
-          <p className="text-slate-500 text-sm font-medium">Total Scheduled</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{globalStats.totalScheduled}</p>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2">To be Dispatched</p>
+          <p className="text-slate-500 text-xs font-medium">Total Scheduled</p>
+          <p className="text-xl font-bold text-slate-900 mt-0.5">{globalStats.totalScheduled}</p>
+          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">To be Dispatched</p>
         </div>
       </div>
 
@@ -343,7 +343,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       )}
 
       {/* Stats Grid - Product Wise Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {pinnedItems.map(item => {
           const isLow = item.currentStock <= item.minStock;
           const itemTxs = transactions.filter(tx => tx.itemId === item.id);
@@ -359,40 +359,40 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
             .reduce((acc, tx) => acc + tx.quantity, 0);
 
           return (
-            <div key={item.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative group">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-xl ${isLow ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
-                  <Package size={24} />
+            <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 relative group">
+              <div className="flex items-center justify-between mb-3">
+                <div className={`p-2 rounded-xl ${isLow ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
+                  <Package size={20} />
                 </div>
                 {item.scheduledStock > 0 && (
-                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full uppercase tracking-wider">
-                    {item.scheduledStock} Scheduled
+                  <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    {item.scheduledStock} Sch
                   </span>
                 )}
                 {isLow && (
-                  <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-full uppercase tracking-wider">
-                    Low Stock
+                  <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Low
                   </span>
                 )}
               </div>
-              <h3 className="text-slate-500 text-sm font-medium truncate pr-4">{item.name}</h3>
-              <div className="flex items-baseline gap-2 mt-1">
-                <p className="text-2xl font-bold text-slate-900">{item.currentStock}</p>
-                <span className="text-xs text-slate-400 font-medium">{item.unit} (Available)</span>
+              <h3 className="text-slate-500 text-xs font-medium truncate pr-4">{item.name}</h3>
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <p className="text-xl font-bold text-slate-900">{item.currentStock}</p>
+                <span className="text-[10px] text-slate-400 font-medium">{item.unit}</span>
               </div>
-              <div className="mt-4 pt-4 border-t border-slate-50 flex flex-col gap-2">
+              <div className="mt-3 pt-3 border-t border-slate-50 flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
                     In: <span className="text-emerald-500">{stockInTotal}</span>
                   </div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
                     Out: <span className="text-rose-500">{stockOutTotal}</span>
                   </div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
                     Sch: <span className="text-amber-500">{scheduledTotal}</span>
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-right">
+                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider text-right truncate">
                   {categories.find(c => c.id === item.categoryId)?.name}
                 </div>
               </div>
@@ -409,21 +409,21 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       </div>
 
       {/* Production Analytics Section */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp size={20} className="text-blue-600" />
-              <h3 className="text-lg font-bold text-slate-900">Production Analytics</h3>
+            <div className="flex items-center gap-2 mb-0.5">
+              <TrendingUp size={18} className="text-blue-600" />
+              <h3 className="text-base font-bold text-slate-900">Production Analytics</h3>
             </div>
-            <p className="text-slate-500 text-sm">Product-wise production trends (Stock IN)</p>
+            <p className="text-slate-500 text-xs">Product-wise production trends (Stock IN)</p>
           </div>
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
             {(['daily', 'weekly', 'monthly'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setProdTimeframe(t)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
                   prodTimeframe === t 
                     ? 'bg-white text-blue-600 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700'
@@ -435,8 +435,8 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 h-[400px]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={productionData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
@@ -531,20 +531,20 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 gap-8">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <h3 className="text-lg font-bold text-slate-900">Stock Movement (Weekly)</h3>
-            <div className="flex flex-wrap items-center gap-3">
+      <div className="grid grid-cols-1 gap-6">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+            <h3 className="text-base font-bold text-slate-900">Stock Movement (Weekly)</h3>
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={selectedCategoryId}
                 onChange={(e) => {
                   setSelectedCategoryId(e.target.value);
                   setSelectedItemId('all');
                 }}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">All Categories</option>
+                <option value="all">Categories</option>
                 {categories.map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
@@ -552,9 +552,9 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
               <select
                 value={selectedItemId}
                 onChange={(e) => setSelectedItemId(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">All Products</option>
+                <option value="all">Products</option>
                 {items
                   .filter(i => selectedCategoryId === 'all' || i.categoryId === selectedCategoryId)
                   .map(item => (
@@ -563,7 +563,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
               </select>
             </div>
           </div>
-          <div className="h-80 w-full">
+          <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
@@ -622,25 +622,25 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       </div>
 
       {/* Recent Transactions & Low Stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-900">Recent Transactions</h3>
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900">Recent Transactions</h3>
             <button 
               onClick={() => setView('transactions')}
-              className="text-blue-600 text-sm font-semibold hover:text-blue-700 flex items-center gap-1"
+              className="text-blue-600 text-xs font-semibold hover:text-blue-700 flex items-center gap-1"
             >
-              View All <ArrowRight size={16} />
+              View All <ArrowRight size={14} />
             </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                  <th className="px-6 py-3 font-semibold">Voucher</th>
-                  <th className="px-6 py-3 font-semibold">Item</th>
-                  <th className="px-6 py-3 font-semibold">Type</th>
-                  <th className="px-6 py-3 font-semibold">Qty</th>
+                <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
+                  <th className="px-5 py-2.5 font-semibold">Voucher</th>
+                  <th className="px-5 py-2.5 font-semibold">Item</th>
+                  <th className="px-5 py-2.5 font-semibold">Type</th>
+                  <th className="px-5 py-2.5 font-semibold">Qty</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -652,18 +652,18 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                     
                     return itemMatch;
                   })
-                  .slice(0, 10).map((tx) => (
+                  .slice(0, 8).map((tx) => (
                   <tr 
                     key={tx.id} 
                     onClick={() => setView('transactions')}
                     className="hover:bg-slate-50 transition-colors cursor-pointer"
                   >
-                    <td className="px-6 py-4 text-sm font-medium text-slate-900">{tx.voucherNo}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
+                    <td className="px-5 py-3 text-xs font-medium text-slate-900">{tx.voucherNo}</td>
+                    <td className="px-5 py-3 text-xs text-slate-600">
                       {items.find(i => i.id === tx.itemId)?.name || 'Unknown Item'}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    <td className="px-5 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
                         tx.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : 
                         tx.type === 'OUT' ? 'bg-rose-100 text-rose-800' :
                         'bg-amber-100 text-amber-800'
@@ -671,7 +671,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                         {tx.type}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{tx.quantity}</td>
+                    <td className="px-5 py-3 text-xs text-slate-600">{tx.quantity}</td>
                   </tr>
                 ))}
               </tbody>
@@ -680,13 +680,13 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-900">Low Stock Alerts</h3>
-            <span className="bg-rose-100 text-rose-800 text-xs font-bold px-2.5 py-1 rounded-full">
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900">Low Stock Alerts</h3>
+            <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
               {items.filter(item => item.currentStock <= item.minStock).length} Critical
             </span>
           </div>
-          <div className="p-6 space-y-4">
+          <div className="p-5 space-y-3">
             {items
               .filter(item => item.currentStock <= item.minStock)
               .filter(item => {
@@ -695,24 +695,24 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                 return catMatch && itemMatch;
               })
               .slice(0, 5).map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="bg-white p-2 rounded-lg shadow-sm">
-                    <Package size={20} className="text-slate-400" />
+              <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="bg-white p-1.5 rounded-lg shadow-sm">
+                    <Package size={18} className="text-slate-400" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">{item.name}</h4>
+                    <h4 className="text-xs font-bold text-slate-900">{item.name}</h4>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-bold text-rose-600">{item.currentStock} {item.unit}</p>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Current</p>
+                  <p className="text-xs font-bold text-rose-600">{item.currentStock} {item.unit}</p>
+                  <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Current</p>
                 </div>
               </div>
             ))}
             {items.filter(item => item.currentStock <= item.minStock).length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-slate-400 italic">All stock levels are healthy</p>
+              <div className="text-center py-6">
+                <p className="text-slate-400 text-xs italic">All stock levels are healthy</p>
               </div>
             )}
           </div>

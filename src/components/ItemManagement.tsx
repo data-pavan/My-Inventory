@@ -124,41 +124,41 @@ export default function ItemManagement() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Product Management</h1>
-          <p className="text-slate-500">Manage your inventory items and stock levels</p>
+          <h1 className="text-xl font-bold text-slate-900">Product Management</h1>
+          <p className="text-xs text-slate-500">Manage your inventory items and stock levels</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button 
             onClick={() => openModal()}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+            className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 text-sm"
           >
-            <Plus size={20} />
+            <Plus size={18} />
             <span>Add Product</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-4">
+      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-3">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input 
             type="text" 
-            placeholder="Search products by name..." 
+            placeholder="Search products..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter size={18} className="text-slate-400" />
+          <Filter size={16} className="text-slate-400" />
           <select 
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
           >
             <option value="ALL">All Categories</option>
             {categories.map(cat => (
@@ -171,13 +171,13 @@ export default function ItemManagement() {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-              <th className="px-6 py-4 font-semibold">Item Name</th>
-              <th className="px-6 py-4 font-semibold">Category</th>
-              <th className="px-6 py-4 font-semibold">Available Stock</th>
-              <th className="px-6 py-4 font-semibold">Scheduled</th>
-              <th className="px-6 py-4 font-semibold">Unit</th>
-              <th className="px-6 py-4 font-semibold text-right">Actions</th>
+            <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
+              <th className="px-4 py-3 font-semibold">Item Name</th>
+              <th className="px-4 py-3 font-semibold">Category</th>
+              <th className="px-4 py-3 font-semibold">Available Stock</th>
+              <th className="px-4 py-3 font-semibold">Scheduled</th>
+              <th className="px-4 py-3 font-semibold">Unit</th>
+              <th className="px-4 py-3 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -186,45 +186,45 @@ export default function ItemManagement() {
               const isLowStock = item.currentStock <= item.minStock;
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-slate-100 p-2 rounded-lg text-slate-600 group-hover:bg-white group-hover:shadow-sm transition-all">
-                        <Package size={18} />
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-slate-100 p-1.5 rounded-lg text-slate-600 group-hover:bg-white group-hover:shadow-sm transition-all">
+                        <Package size={16} />
                       </div>
-                      <span className="font-medium text-slate-900">{item.name}</span>
+                      <span className="font-medium text-slate-900 text-sm">{item.name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-800">
                       {category?.name || 'Unknown'}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex flex-col">
-                      <span className={`font-bold ${isLowStock ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      <span className={`font-bold text-sm ${isLowStock ? 'text-rose-600' : 'text-emerald-600'}`}>
                         {item.currentStock} {item.unit}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="font-semibold text-amber-600">
+                  <td className="px-4 py-3">
+                    <span className="font-semibold text-amber-600 text-sm">
                       {item.scheduledStock || 0} {item.unit}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-slate-600">{item.unit}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <td className="px-4 py-3 text-slate-600 text-sm">{item.unit}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
                         onClick={() => openModal(item)}
-                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                       >
-                        <Edit2 size={18} />
+                        <Edit2 size={16} />
                       </button>
                       <button 
                         onClick={() => handleDelete(item.id)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>

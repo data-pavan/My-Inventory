@@ -67,48 +67,48 @@ export default function CategoryManagement() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Category Management</h1>
-          <p className="text-slate-500">Organize your items by categories</p>
+          <h1 className="text-xl font-bold text-slate-900">Category Management</h1>
+          <p className="text-xs text-slate-500">Organize your items by categories</p>
         </div>
         <button 
           onClick={() => openModal()}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+          className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 text-sm"
         >
-          <Plus size={20} />
+          <Plus size={18} />
           <span>Add Category</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-              <th className="px-6 py-4 font-semibold">Category Name</th>
-              <th className="px-6 py-4 font-semibold">Description</th>
-              <th className="px-6 py-4 font-semibold text-right">Actions</th>
+            <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
+              <th className="px-4 py-2 font-semibold">Category Name</th>
+              <th className="px-4 py-2 font-semibold">Description</th>
+              <th className="px-4 py-2 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {categories.map((cat) => (
               <tr key={cat.id} className="hover:bg-slate-50 transition-colors group">
-                <td className="px-6 py-4 font-medium text-slate-900">{cat.name}</td>
-                <td className="px-6 py-4 text-slate-600 max-w-md truncate">{cat.description || '-'}</td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <td className="px-4 py-2.5 font-medium text-slate-900 text-sm">{cat.name}</td>
+                <td className="px-4 py-2.5 text-slate-600 max-w-md truncate text-xs">{cat.description || '-'}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => openModal(cat)}
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                     >
-                      <Edit2 size={18} />
+                      <Edit2 size={16} />
                     </button>
                     <button 
                       onClick={() => handleDelete(cat.id)}
-                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </td>
@@ -116,7 +116,7 @@ export default function CategoryManagement() {
             ))}
             {categories.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-6 py-12 text-center text-slate-400 italic">
+                <td colSpan={3} className="px-4 py-8 text-center text-slate-400 italic text-xs">
                   No categories found. Click "Add Category" to get started.
                 </td>
               </tr>

@@ -539,41 +539,41 @@ export default function Transactions() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Transaction History</h1>
-          <p className="text-slate-500">Track all stock movements and vouchers</p>
+          <h1 className="text-xl font-bold text-slate-900">Transaction History</h1>
+          <p className="text-xs text-slate-500">Track all stock movements and vouchers</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => openModal('IN')}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
+            className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 text-sm"
           >
-            <ArrowDownCircle size={20} />
+            <ArrowDownCircle size={18} />
             <span>Stock IN</span>
           </button>
           <button 
             onClick={() => openModal('OUT')}
-            className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20"
+            className="flex items-center gap-2 bg-rose-600 text-white px-3 py-1.5 rounded-lg hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20 text-sm"
           >
-            <ArrowUpCircle size={20} />
+            <ArrowUpCircle size={18} />
             <span>Stock OUT</span>
           </button>
           <button 
             onClick={() => openModal('SCHEDULED')}
-            className="flex items-center gap-2 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors shadow-lg shadow-amber-600/20"
+            className="flex items-center gap-2 bg-amber-600 text-white px-3 py-1.5 rounded-lg hover:bg-amber-700 transition-colors shadow-lg shadow-amber-600/20 text-sm"
           >
-            <Clock size={20} />
+            <Clock size={18} />
             <span>Scheduled</span>
           </button>
           {selectedTxIds.length > 0 && (
             <div className="flex gap-2">
               <button 
                 onClick={() => setIsBatchModalOpen(true)}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20 animate-in zoom-in duration-200"
+                className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20 animate-in zoom-in duration-200 text-sm"
               >
-                <Edit2 size={20} />
+                <Edit2 size={18} />
                 <span>Batch Edit ({selectedTxIds.length})</span>
               </button>
               {filteredTransactions.some(tx => selectedTxIds.includes(tx.id) && tx.type === 'SCHEDULED') && (
@@ -582,9 +582,9 @@ export default function Transactions() {
                     setBatchDispatchDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
                     setIsBatchDispatchModalOpen(true);
                   }}
-                  className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 animate-in zoom-in duration-200"
+                  className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 animate-in zoom-in duration-200 text-sm"
                 >
-                  <ArrowUpCircle size={20} />
+                  <ArrowUpCircle size={18} />
                   <span>Batch Dispatch</span>
                 </button>
               )}
@@ -592,49 +592,49 @@ export default function Transactions() {
           )}
           <button 
             onClick={exportToExcel}
-            className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+            className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm text-sm"
           >
-            <Download size={18} />
+            <Download size={16} />
             <span>Export Excel</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-4">
+      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-3">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input 
             type="text" 
             placeholder="Search by item or voucher..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <CalendarIcon size={18} className="text-slate-400" />
+            <CalendarIcon size={16} className="text-slate-400" />
             <input 
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
             />
-            <span className="text-slate-400">to</span>
+            <span className="text-slate-400 text-xs">to</span>
             <input 
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
             />
           </div>
           <div className="flex items-center gap-2">
-            <Filter size={18} className="text-slate-400" />
+            <Filter size={16} className="text-slate-400" />
             <select 
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
             >
               <option value="ALL">All Types</option>
               <option value="IN">Stock IN</option>
@@ -650,25 +650,25 @@ export default function Transactions() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                <th className="px-6 py-4 font-semibold">
+              <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
+                <th className="px-4 py-3 font-semibold">
                   <input 
                     type="checkbox" 
                     checked={filteredTransactions.length > 0 && selectedTxIds.length === filteredTransactions.length}
                     onChange={toggleSelectAll}
-                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                    className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                   />
                 </th>
-                <th className="px-6 py-4 font-semibold">Voucher No</th>
-                <th className="px-6 py-4 font-semibold">Invoice/PI</th>
-                <th className="px-6 py-4 font-semibold">Date</th>
-                <th className="px-6 py-4 font-semibold">Type</th>
-                <th className="px-6 py-4 font-semibold">Item</th>
-                <th className="px-6 py-4 font-semibold">Quantity</th>
-                <th className="px-6 py-4 font-semibold">Sales Person</th>
-                <th className="px-6 py-4 font-semibold">Created By</th>
-                <th className="px-6 py-4 font-semibold">Source/Dest</th>
-                <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                <th className="px-4 py-3 font-semibold">Voucher No</th>
+                <th className="px-4 py-3 font-semibold">Invoice/PI</th>
+                <th className="px-4 py-3 font-semibold">Date</th>
+                <th className="px-4 py-3 font-semibold">Type</th>
+                <th className="px-4 py-3 font-semibold">Item</th>
+                <th className="px-4 py-3 font-semibold">Quantity</th>
+                <th className="px-4 py-3 font-semibold">Sales Person</th>
+                <th className="px-4 py-3 font-semibold">Created By</th>
+                <th className="px-4 py-3 font-semibold">Source/Dest</th>
+                <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -677,65 +677,65 @@ export default function Transactions() {
                 const isSelected = selectedTxIds.includes(tx.id);
                 return (
                   <tr key={tx.id} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50/50' : ''}`}>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <input 
                         type="checkbox" 
                         checked={isSelected}
                         onChange={() => toggleSelectTx(tx.id)}
-                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                        className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                       />
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-900">{tx.voucherNo}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600 font-medium">{tx.invoiceNo || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
+                    <td className="px-4 py-3 font-bold text-slate-900 text-sm">{tx.voucherNo}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600 font-medium">{tx.invoiceNo || '-'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600">
                       {format(new Date(tx.date), 'MMM dd, yyyy HH:mm')}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         tx.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : 
                         tx.type === 'OUT' ? 'bg-rose-100 text-rose-800' :
                         'bg-amber-100 text-amber-800'
                       }`}>
-                        {tx.type === 'IN' ? <ArrowDownCircle size={12} /> : 
-                         tx.type === 'OUT' ? <ArrowUpCircle size={12} /> :
-                         <Clock size={12} />}
+                        {tx.type === 'IN' ? <ArrowDownCircle size={10} /> : 
+                         tx.type === 'OUT' ? <ArrowUpCircle size={10} /> :
+                         <Clock size={10} />}
                         {tx.type}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-slate-900">{item?.name || 'Unknown'}</span>
-                        <span className="text-xs text-slate-500">{categories.find(c => c.id === item?.categoryId)?.name}</span>
+                        <span className="text-xs font-semibold text-slate-900">{item?.name || 'Unknown'}</span>
+                        <span className="text-[10px] text-slate-500">{categories.find(c => c.id === item?.categoryId)?.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1">
-                          <span className="font-bold text-slate-900">{tx.quantity}</span>
-                          <span className="text-xs text-slate-500">{item?.unit}</span>
+                          <span className="font-bold text-slate-900 text-sm">{tx.quantity}</span>
+                          <span className="text-[10px] text-slate-500">{item?.unit}</span>
                         </div>
                         {tx.fromScheduled && (
-                          <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tight">From Scheduled</span>
+                          <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tight">From Scheduled</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-slate-600">{tx.salesPerson || '-'}</span>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-medium text-slate-600">{tx.salesPerson || '-'}</span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex flex-col">
-                        <span className="text-xs font-medium text-slate-600 truncate max-w-[120px]" title={users.find(u => u.uid === tx.createdBy)?.email || tx.createdBy}>
+                        <span className="text-[10px] font-medium text-slate-600 truncate max-w-[100px]" title={users.find(u => u.uid === tx.createdBy)?.email || tx.createdBy}>
                           {users.find(u => u.uid === tx.createdBy)?.email?.split('@')[0] || 'Unknown'}
                         </span>
-                        <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+                        <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">
                           {users.find(u => u.uid === tx.createdBy)?.role || 'staff'}
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 truncate max-w-[150px]">
+                    <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[120px]">
                       {tx.sourceDestination || '-'}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {tx.type === 'SCHEDULED' && (
                           <div className="flex gap-1">
@@ -743,37 +743,37 @@ export default function Transactions() {
                               onClick={() => {
                                 openModal('OUT', tx);
                               }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-all shadow-sm shadow-emerald-600/20 active:scale-95"
+                              className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-all shadow-sm shadow-emerald-600/20 active:scale-95"
                               title="Dispatch Scheduled Item"
                             >
-                              <ArrowUpCircle size={14} />
+                              <ArrowUpCircle size={12} />
                               <span>DISPATCH</span>
                             </button>
                             {tx.invoiceNo && transactions.filter(t => t.invoiceNo === tx.invoiceNo && t.type === 'SCHEDULED').length > 1 && (
                               <button 
                                 onClick={() => openPIDispatchModal(tx.invoiceNo!)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-all shadow-sm shadow-indigo-600/20 active:scale-95"
+                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-all shadow-sm shadow-indigo-600/20 active:scale-95"
                                 title="Dispatch Entire PI"
                               >
-                                <ArrowUpCircle size={14} />
-                                <span>DISPATCH PI</span>
+                                <ArrowUpCircle size={12} />
+                                <span>PI</span>
                               </button>
                             )}
                           </div>
                         )}
                         <button 
                           onClick={() => openModal(tx.type, tx)}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Edit Transaction"
                         >
-                          <Edit2 size={18} />
+                          <Edit2 size={16} />
                         </button>
                         <button 
                           onClick={() => setConfirmAction({ type: 'DELETE', tx })}
-                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                           title="Delete Transaction"
                         >
-                          <Trash2 size={18} />
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>
@@ -782,7 +782,7 @@ export default function Transactions() {
               })}
               {filteredTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                  <td colSpan={11} className="px-4 py-10 text-center text-slate-400 italic text-sm">
                     No transactions found matching your criteria.
                   </td>
                 </tr>
