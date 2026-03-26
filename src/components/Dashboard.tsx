@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -10,19 +10,26 @@ import {
   PieChart, 
   Pie, 
   Cell,
-  Legend
+  Legend,
+  LineChart,
+  Line,
+  AreaChart,
+  Area
 } from 'recharts';
 import { 
   AlertTriangle, 
   Package, 
   ArrowRight,
   Download,
-  Clock
+  Clock,
+  TrendingUp,
+  Calendar,
+  Filter
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Item, Transaction, Category } from '../types';
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths, isWithinInterval, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
 
 export default function Dashboard({ setView }: { setView: (view: string) => void }) {
@@ -39,6 +46,9 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   const [pinnedItemIds, setPinnedItemIds] = useState<string[]>([]);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [overviewCategoryId, setOverviewCategoryId] = useState<string>('all');
+
+  // Production Analytics State
+  const [prodTimeframe, setProdTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
@@ -72,6 +82,73 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       unsubCategories();
     };
   }, []);
+
+  // Production Data Aggregation
+  const productionData = useMemo(() => {
+    const now = new Date();
+    let intervals: Date[] = [];
+    let formatStr = 'MMM dd';
+
+    if (prodTimeframe === 'daily') {
+      intervals = eachDayOfInterval({ start: subDays(now, 6), end: now });
+      formatStr = 'EEE';
+    } else if (prodTimeframe === 'weekly') {
+      intervals = eachWeekOfInterval({ start: subWeeks(now, 3), end: now });
+      formatStr = "'W'w";
+    } else if (prodTimeframe === 'monthly') {
+      intervals = eachMonthOfInterval({ start: subMonths(now, 5), end: now });
+      formatStr = 'MMM';
+    }
+
+    return intervals.map(date => {
+      let start: Date, end: Date;
+      if (prodTimeframe === 'daily') {
+        start = startOfDay(date);
+        end = endOfDay(date);
+      } else if (prodTimeframe === 'weekly') {
+        start = startOfWeek(date);
+        end = endOfWeek(date);
+      } else {
+        start = startOfMonth(date);
+        end = endOfMonth(date);
+      }
+
+      const periodTxs = transactions.filter(tx => {
+        const txDate = new Date(tx.date);
+        return tx.type === 'IN' && isWithinInterval(txDate, { start, end });
+      });
+
+      const dataPoint: any = {
+        name: format(date, formatStr),
+        total: periodTxs.reduce((acc, tx) => acc + tx.quantity, 0)
+      };
+
+      // Breakdown by product
+      items.forEach(item => {
+        const itemQty = periodTxs
+          .filter(tx => tx.itemId === item.id)
+          .reduce((acc, tx) => acc + tx.quantity, 0);
+        if (itemQty > 0) {
+          dataPoint[item.name] = itemQty;
+        }
+      });
+
+      return dataPoint;
+    });
+  }, [prodTimeframe, transactions, items]);
+
+  // Get all product names that have production in the current data
+  const productionProducts = useMemo(() => {
+    const productSet = new Set<string>();
+    productionData.forEach(d => {
+      Object.keys(d).forEach(key => {
+        if (key !== 'name' && key !== 'total') {
+          productSet.add(key);
+        }
+      });
+    });
+    return Array.from(productSet);
+  }, [productionData]);
 
   const togglePin = (id: string) => {
     const newPinned = pinnedItemIds.includes(id)
@@ -142,7 +219,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
     value: items.filter(item => item.categoryId === cat.id).length
   })).filter(d => d.value > 0);
 
-  const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+  const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316', '#14B8A6'];
 
   const exportToExcel = () => {
     const ws = XLSX.utils.json_to_sheet(items.map(item => ({
@@ -329,6 +406,128 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
             <p className="text-slate-500 text-sm mt-1">Click "Select Items to Show" to customize your dashboard</p>
           </div>
         )}
+      </div>
+
+      {/* Production Analytics Section */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp size={20} className="text-blue-600" />
+              <h3 className="text-lg font-bold text-slate-900">Production Analytics</h3>
+            </div>
+            <p className="text-slate-500 text-sm">Product-wise production trends (Stock IN)</p>
+          </div>
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+            {(['daily', 'weekly', 'monthly'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setProdTimeframe(t)}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                  prodTimeframe === t 
+                    ? 'bg-white text-blue-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={productionData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fill: '#64748B', fontSize: 12}} 
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fill: '#64748B', fontSize: 12}} 
+                />
+                <Tooltip 
+                  cursor={{fill: '#F8FAFC'}}
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-white p-4 rounded-xl shadow-xl border border-slate-100 min-w-[200px]">
+                          <p className="font-bold text-slate-900 mb-2 border-b pb-2">{label} Production</p>
+                          <div className="space-y-1.5">
+                            {payload.map((entry: any, index: number) => (
+                              <div key={index} className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{backgroundColor: entry.color}}></div>
+                                  <span className="text-xs text-slate-600">{entry.name}</span>
+                                </div>
+                                <span className="text-xs font-bold text-slate-900">{entry.value}</span>
+                              </div>
+                            ))}
+                            <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-900">Total</span>
+                              <span className="text-xs font-bold text-blue-600">
+                                {payload.reduce((acc: number, curr: any) => acc + curr.value, 0)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend iconType="circle" />
+                {productionProducts.map((product, index) => (
+                  <Bar 
+                    key={product} 
+                    dataKey={product} 
+                    stackId="a" 
+                    fill={COLORS[index % COLORS.length]} 
+                    radius={index === productionProducts.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="space-y-6">
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Filter size={16} className="text-slate-400" />
+              Top Products this Period
+            </h4>
+            <div className="space-y-3">
+              {productionProducts
+                .map(p => ({
+                  name: p,
+                  total: productionData.reduce((acc, d) => acc + (d[p] || 0), 0)
+                }))
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 5)
+                .map((p, i) => (
+                  <div key={p.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-100 shadow-sm">
+                        0{i + 1}
+                      </div>
+                      <span className="text-sm font-medium text-slate-700">{p.name}</span>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600">{p.total}</span>
+                  </div>
+                ))}
+              {productionProducts.length === 0 && (
+                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <Calendar className="mx-auto text-slate-300 mb-2" size={32} />
+                  <p className="text-slate-400 text-xs italic">No production recorded for this period</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Charts Grid */}
