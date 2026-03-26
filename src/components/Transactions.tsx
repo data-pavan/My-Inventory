@@ -47,6 +47,9 @@ export default function Transactions() {
   const [modalType, setModalType] = useState<TransactionType>('IN');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInvoice, setSearchInvoice] = useState('');
+  const [searchSalesPerson, setSearchSalesPerson] = useState('');
+  const [searchSourceDest, setSearchSourceDest] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [dateRange, setDateRange] = useState({
     start: '',
@@ -438,13 +441,18 @@ export default function Transactions() {
     const item = items.find(i => i.id === tx.itemId);
     const matchesSearch = item?.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          tx.voucherNo.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesInvoice = !searchInvoice || (tx.invoiceNo || '').toLowerCase().includes(searchInvoice.toLowerCase());
+    const matchesSalesPerson = !searchSalesPerson || (tx.salesPerson || '').toLowerCase().includes(searchSalesPerson.toLowerCase());
+    const matchesSourceDest = !searchSourceDest || (tx.sourceDestination || '').toLowerCase().includes(searchSourceDest.toLowerCase());
+    
     const matchesType = filterType === 'ALL' || tx.type === filterType;
     
     const txDate = new Date(tx.date).getTime();
     const matchesStart = !dateRange.start || txDate >= new Date(dateRange.start).getTime();
     const matchesEnd = !dateRange.end || txDate <= new Date(dateRange.end).setHours(23, 59, 59, 999);
     
-    return matchesSearch && matchesType && matchesStart && matchesEnd;
+    return matchesSearch && matchesInvoice && matchesSalesPerson && matchesSourceDest && matchesType && matchesStart && matchesEnd;
   });
 
   const handleBatchDispatch = async (e?: React.FormEvent) => {
@@ -601,46 +609,81 @@ export default function Transactions() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input 
-            type="text" 
-            placeholder="Search by item or voucher..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <CalendarIcon size={16} className="text-slate-400" />
+      <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 space-y-2">
+        <div className="flex flex-col md:flex-row gap-2">
+          <div className="flex-1 relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input 
-              type="date"
-              value={dateRange.start}
-              onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
-            />
-            <span className="text-slate-400 text-xs">to</span>
-            <input 
-              type="date"
-              value={dateRange.end}
-              onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+              type="text" 
+              placeholder="Search by item or voucher..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-slate-400" />
-            <select 
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
-            >
-              <option value="ALL">All Types</option>
-              <option value="IN">Stock IN</option>
-              <option value="OUT">Stock OUT</option>
-              <option value="SCHEDULED">Scheduled</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <CalendarIcon size={14} className="text-slate-400" />
+              <input 
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+              />
+              <span className="text-slate-400 text-[10px]">to</span>
+              <input 
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Filter size={14} className="text-slate-400" />
+              <select 
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none text-[10px] font-medium"
+              >
+                <option value="ALL">All Types</option>
+                <option value="IN">Stock IN</option>
+                <option value="OUT">Stock OUT</option>
+                <option value="SCHEDULED">Scheduled</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t border-slate-50">
+          <div className="relative">
+            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold uppercase">PI:</div>
+            <input 
+              type="text" 
+              placeholder="Invoice/PI No..." 
+              value={searchInvoice}
+              onChange={(e) => setSearchInvoice(e.target.value)}
+              className="w-full pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
+            />
+          </div>
+          <div className="relative">
+            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold uppercase">Sales:</div>
+            <input 
+              type="text" 
+              placeholder="Sales Person..." 
+              value={searchSalesPerson}
+              onChange={(e) => setSearchSalesPerson(e.target.value)}
+              className="w-full pl-12 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
+            />
+          </div>
+          <div className="relative">
+            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold uppercase">Loc:</div>
+            <input 
+              type="text" 
+              placeholder="Source/Destination..." 
+              value={searchSourceDest}
+              onChange={(e) => setSearchSourceDest(e.target.value)}
+              className="w-full pl-10 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
+            />
           </div>
         </div>
       </div>

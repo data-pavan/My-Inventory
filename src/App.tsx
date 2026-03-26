@@ -11,6 +11,7 @@ import CategoryManagement from './components/CategoryManagement';
 import ItemManagement from './components/ItemManagement';
 import Transactions from './components/Transactions';
 import StockTable from './components/StockTable';
+import OverdueDispatchModal from './components/OverdueDispatchModal';
 
 interface AuthContextType {
   user: User | null;
@@ -89,6 +90,7 @@ export default function App() {
   return (
     <AuthContext.Provider value={{ user, profile, loading }}>
       <Toaster position="top-right" />
+      <OverdueDispatchModal />
       <Layout currentView={currentView} setView={setCurrentView}>
         {renderView()}
       </Layout>
