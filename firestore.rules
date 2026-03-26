@@ -23,6 +23,7 @@
 //   - minStock: number (required)
 //   - initialStock: number (required)
 //   - currentStock: number (required)
+//   - scheduledStock: number (optional)
 //
 // Collection: transactions
 // Document ID: transactionId
@@ -30,7 +31,7 @@
 //   - voucherNo: string (required)
 //   - invoiceNo: string (optional)
 //   - date: string (required, ISO 8601)
-//   - type: string (required, ['IN', 'OUT'])
+//   - type: string (required, ['IN', 'OUT', 'SCHEDULED'])
 //   - itemId: string (required)
 //   - quantity: number (required, positive)
 //   - sourceDestination: string (optional)
@@ -57,8 +58,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email == "data.pavan11@gmail.com" ||
-         request.auth.token.get('email', '') == "data.pavan11@gmail.com" ||
+        (request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co"] ||
+         request.auth.token.get('email', '') in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co"] ||
          request.auth.uid == "EtTxydwOeIgqb7GcwoVPGECwA5s2" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin'));
@@ -101,16 +102,18 @@ service cloud.firestore {
              data.get('categoryId', '') is string &&
              data.get('unit', '') is string &&
              data.get('minStock', 0) is number &&
-             data.get('currentStock', 0) is number;
+             data.get('currentStock', 0) is number &&
+             (!('scheduledStock' in data) || data.get('scheduledStock', 0) is number);
     }
 
     function isValidTransaction(data) {
       return data.get('voucherNo', '') is string &&
              data.get('date', '') is string &&
-             data.get('type', '') in ['IN', 'OUT'] &&
+             data.get('type', '') in ['IN', 'OUT', 'SCHEDULED'] &&
              data.get('itemId', '') is string &&
              data.get('quantity', 0) is number &&
-             data.get('createdBy', '') == request.auth.uid;
+             data.get('createdBy', '') == request.auth.uid &&
+             (!('fromScheduled' in data) || data.get('fromScheduled', false) is bool);
     }
 
     // ===============================================================
@@ -121,7 +124,7 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
         (request.resource.data.role == 'staff' || 
-         (request.resource.data.role == 'admin' && request.auth.token.email == "data.pavan11@gmail.com") ||
+         (request.resource.data.role == 'admin' && request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co"]) ||
          isAdmin());
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
         ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
@@ -135,7 +138,7 @@ service cloud.firestore {
     match /items/{itemId} {
       allow read: if isAuthenticated();
       allow create: if isAdmin() && isValidItem(request.resource.data);
-      allow update: if isAuthenticated() && (isAdmin() || (isValidItem(request.resource.data) && isStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStock'])));
+      allow update: if isAuthenticated() && (isAdmin() || (isValidItem(request.resource.data) && isStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStock', 'scheduledStock'])));
       allow delete: if isAdmin();
     }
 

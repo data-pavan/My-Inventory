@@ -17,7 +17,8 @@ export default function ItemManagement() {
     unit: 'pcs',
     minStock: 10,
     initialStock: 0,
-    currentStock: 0
+    currentStock: 0,
+    scheduledStock: 0
   });
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,7 +61,8 @@ export default function ItemManagement() {
         // For new items, current stock starts as initial stock
         const newItemData = {
           ...formData,
-          currentStock: formData.initialStock
+          currentStock: formData.initialStock,
+          scheduledStock: 0
         };
         await addDoc(collection(db, 'items'), newItemData);
         toast.success('Item added successfully');
@@ -92,7 +94,8 @@ export default function ItemManagement() {
         unit: item.unit,
         minStock: item.minStock,
         initialStock: item.initialStock || 0,
-        currentStock: item.currentStock
+        currentStock: item.currentStock,
+        scheduledStock: item.scheduledStock || 0
       });
     } else {
       setEditingItem(null);
@@ -102,7 +105,8 @@ export default function ItemManagement() {
         unit: 'pcs',
         minStock: 10,
         initialStock: 0,
-        currentStock: 0
+        currentStock: 0,
+        scheduledStock: 0
       });
     }
     setIsModalOpen(true);
@@ -170,7 +174,8 @@ export default function ItemManagement() {
             <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
               <th className="px-6 py-4 font-semibold">Item Name</th>
               <th className="px-6 py-4 font-semibold">Category</th>
-              <th className="px-6 py-4 font-semibold">Stock Level</th>
+              <th className="px-6 py-4 font-semibold">Available Stock</th>
+              <th className="px-6 py-4 font-semibold">Scheduled</th>
               <th className="px-6 py-4 font-semibold">Unit</th>
               <th className="px-6 py-4 font-semibold text-right">Actions</th>
             </tr>
@@ -200,6 +205,11 @@ export default function ItemManagement() {
                         {item.currentStock} {item.unit}
                       </span>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="font-semibold text-amber-600">
+                      {item.scheduledStock || 0} {item.unit}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-slate-600">{item.unit}</td>
                   <td className="px-6 py-4 text-right">

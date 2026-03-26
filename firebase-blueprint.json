@@ -19,7 +19,8 @@
         "categoryId": { "type": "string", "description": "The ID of the category" },
         "unit": { "type": "string", "description": "The unit of measurement (pcs, kg, etc.)" },
         "minStock": { "type": "number", "description": "Minimum stock level for alerts" },
-        "currentStock": { "type": "number", "description": "Current stock level (auto-calculated)" }
+        "currentStock": { "type": "number", "description": "Current stock level (auto-calculated)" },
+        "scheduledStock": { "type": "number", "description": "Stock scheduled for dispatch" }
       },
       "required": ["name", "categoryId", "unit", "minStock", "currentStock"]
     },
@@ -30,12 +31,13 @@
       "properties": {
         "voucherNo": { "type": "string", "description": "Auto-generated voucher number" },
         "date": { "type": "string", "format": "date-time", "description": "Date of transaction" },
-        "type": { "type": "string", "enum": ["IN", "OUT"], "description": "Transaction type" },
+        "type": { "type": "string", "enum": ["IN", "OUT", "SCHEDULED"], "description": "Transaction type" },
         "itemId": { "type": "string", "description": "The ID of the item" },
         "quantity": { "type": "number", "description": "Quantity moved" },
         "sourceDestination": { "type": "string", "description": "Supplier or Destination" },
         "location": { "type": "string", "description": "Storage location" },
-        "createdBy": { "type": "string", "description": "User ID who created the transaction" }
+        "createdBy": { "type": "string", "description": "User ID who created the transaction" },
+        "fromScheduled": { "type": "boolean", "description": "Whether to dispatch from scheduled stock" }
       },
       "required": ["voucherNo", "date", "type", "itemId", "quantity", "createdBy"]
     },

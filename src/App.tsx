@@ -40,7 +40,7 @@ export default function App() {
           setProfile(profileSnap.data() as UserProfile);
         } else {
           // Default to staff if not exists, unless it's the admin email
-          const isAdmin = user.email === 'data.pavan11@gmail.com';
+          const isAdmin = user.email === 'data.pavan11@gmail.com' || user.email === 'vidhi@bharatnatural.co';
           const newProfile: UserProfile = {
             uid: user.uid,
             email: user.email || '',

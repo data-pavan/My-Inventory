@@ -1,4 +1,4 @@
-export type TransactionType = 'IN' | 'OUT';
+export type TransactionType = 'IN' | 'OUT' | 'SCHEDULED';
 
 export interface Category {
   id: string;
@@ -14,6 +14,7 @@ export interface Item {
   minStock: number;
   initialStock: number;
   currentStock: number;
+  scheduledStock: number;
 }
 
 export interface Transaction {
@@ -27,6 +28,7 @@ export interface Transaction {
   sourceDestination?: string;
   location?: string;
   createdBy: string;
+  fromScheduled?: boolean;
 }
 
 export interface UserProfile {

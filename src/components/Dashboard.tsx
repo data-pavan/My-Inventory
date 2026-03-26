@@ -16,7 +16,8 @@ import {
   AlertTriangle, 
   Package, 
   ArrowRight,
-  Download
+  Download,
+  Clock
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -118,12 +119,20 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       return acc;
     }, {});
 
+    const scheduledBreakdown = dayTxs.filter(tx => tx.type === 'SCHEDULED').reduce((acc: any, tx) => {
+      const itemName = items.find(i => i.id === tx.itemId)?.name || 'Unknown';
+      acc[itemName] = (acc[itemName] || 0) + tx.quantity;
+      return acc;
+    }, {});
+
     return {
       name: dayName,
       in: dayTxs.filter(tx => tx.type === 'IN').reduce((acc, tx) => acc + tx.quantity, 0),
       out: dayTxs.filter(tx => tx.type === 'OUT').reduce((acc, tx) => acc + tx.quantity, 0),
+      scheduled: dayTxs.filter(tx => tx.type === 'SCHEDULED').reduce((acc, tx) => acc + tx.quantity, 0),
       inBreakdown,
-      outBreakdown
+      outBreakdown,
+      scheduledBreakdown
     };
   });
 
@@ -139,7 +148,8 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
     const ws = XLSX.utils.json_to_sheet(items.map(item => ({
       'Item Name': item.name,
       'Category': categories.find(c => c.id === item.categoryId)?.name || 'Unknown',
-      'Current Stock': item.currentStock,
+      'Available Stock': item.currentStock,
+      'Scheduled Stock': item.scheduledStock || 0,
       'Unit': item.unit,
       'Min Stock': item.minStock,
       'Status': item.currentStock <= item.minStock ? 'Low' : 'OK'
@@ -157,7 +167,8 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   });
 
   const globalStats = {
-    lowStockCount: items.filter(item => item.currentStock <= item.minStock).length
+    lowStockCount: items.filter(item => item.currentStock <= item.minStock).length,
+    totalScheduled: items.reduce((acc, item) => acc + (item.scheduledStock || 0), 0)
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-[400px]">
@@ -213,6 +224,17 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           <p className="text-2xl font-bold text-slate-900 mt-1">{globalStats.lowStockCount}</p>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2">Requires Attention</p>
         </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+              <Clock size={20} />
+            </div>
+          </div>
+          <p className="text-slate-500 text-sm font-medium">Total Scheduled</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1">{globalStats.totalScheduled}</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2">To be Dispatched</p>
+        </div>
       </div>
 
       {isCustomizing && (
@@ -255,6 +277,9 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           const stockInTotal = itemTxs
             .filter(tx => tx.type === 'IN')
             .reduce((acc, tx) => acc + tx.quantity, 0);
+          const scheduledTotal = itemTxs
+            .filter(tx => tx.type === 'SCHEDULED')
+            .reduce((acc, tx) => acc + tx.quantity, 0);
 
           return (
             <div key={item.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative group">
@@ -262,6 +287,11 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                 <div className={`p-3 rounded-xl ${isLow ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
                   <Package size={24} />
                 </div>
+                {item.scheduledStock > 0 && (
+                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full uppercase tracking-wider">
+                    {item.scheduledStock} Scheduled
+                  </span>
+                )}
                 {isLow && (
                   <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-full uppercase tracking-wider">
                     Low Stock
@@ -271,15 +301,18 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
               <h3 className="text-slate-500 text-sm font-medium truncate pr-4">{item.name}</h3>
               <div className="flex items-baseline gap-2 mt-1">
                 <p className="text-2xl font-bold text-slate-900">{item.currentStock}</p>
-                <span className="text-xs text-slate-400 font-medium">{item.unit}</span>
+                <span className="text-xs text-slate-400 font-medium">{item.unit} (Available)</span>
               </div>
               <div className="mt-4 pt-4 border-t border-slate-50 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    Total In: <span className="text-emerald-500">{stockInTotal}</span>
+                    In: <span className="text-emerald-500">{stockInTotal}</span>
                   </div>
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    Total Out: <span className="text-rose-500">{stockOutTotal}</span>
+                    Out: <span className="text-rose-500">{stockOutTotal}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    Sch: <span className="text-amber-500">{scheduledTotal}</span>
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-right">
@@ -363,6 +396,15 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                                 </p>
                               ))}
                             </div>
+                            <div className="pt-2 border-t border-slate-50">
+                              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">Scheduled: {data.scheduled}</p>
+                              {Object.entries(data.scheduledBreakdown).map(([name, qty]: any) => (
+                                <p key={name} className="text-[11px] text-slate-600 flex justify-between">
+                                  <span>{name}</span>
+                                  <span className="font-medium">{qty}</span>
+                                </p>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       );
@@ -373,6 +415,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                 <Legend iconType="circle" wrapperStyle={{paddingTop: '20px'}} />
                 <Bar dataKey="in" name="Stock IN" fill="#2563EB" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="out" name="Stock OUT" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="scheduled" name="Scheduled" fill="#F59E0B" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -422,7 +465,9 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        tx.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        tx.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : 
+                        tx.type === 'OUT' ? 'bg-rose-100 text-rose-800' :
+                        'bg-amber-100 text-amber-800'
                       }`}>
                         {tx.type}
                       </span>
