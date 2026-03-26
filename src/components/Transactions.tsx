@@ -62,8 +62,9 @@ export default function Transactions() {
     invoiceNo: '',
     sourceDestination: '',
     location: '',
+    salesPerson: '',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    items: [{ itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
+    items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
   });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -194,6 +195,7 @@ export default function Transactions() {
               invoiceNo: formData.invoiceNo,
               sourceDestination: formData.sourceDestination,
               location: formData.location,
+              salesPerson: formData.salesPerson,
               date: new Date(formData.date).toISOString(),
               type: modalType,
               fromScheduled: entry.fromScheduled
@@ -205,6 +207,7 @@ export default function Transactions() {
               invoiceNo: formData.invoiceNo,
               sourceDestination: formData.sourceDestination,
               location: formData.location,
+              salesPerson: formData.salesPerson,
               voucherNo,
               type: modalType,
               createdBy: auth.currentUser?.uid,
@@ -239,12 +242,15 @@ export default function Transactions() {
     setSelectedCategory('ALL');
     if (tx) {
       setEditingTransaction(tx);
+      const item = items.find(i => i.id === tx.itemId);
       setFormData({
         invoiceNo: tx.invoiceNo || '',
         sourceDestination: tx.sourceDestination || '',
         location: tx.location || '',
+        salesPerson: tx.salesPerson || '',
         date: format(new Date(tx.date), "yyyy-MM-dd'T'HH:mm"),
         items: [{ 
+          categoryId: item?.categoryId || 'ALL',
           itemId: tx.itemId, 
           quantity: tx.quantity, 
           fromScheduled: type === 'OUT' && tx.type === 'SCHEDULED' ? true : (tx.fromScheduled || false),
@@ -257,8 +263,9 @@ export default function Transactions() {
         invoiceNo: '',
         sourceDestination: '',
         location: '',
+        salesPerson: '',
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        items: [{ itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
+        items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
       });
     }
     setIsModalOpen(true);
@@ -275,13 +282,18 @@ export default function Transactions() {
       invoiceNo: firstTx.invoiceNo || '',
       sourceDestination: firstTx.sourceDestination || '',
       location: firstTx.location || '',
+      salesPerson: firstTx.salesPerson || '',
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-      items: relatedTxs.map(t => ({
-        itemId: t.itemId,
-        quantity: t.quantity,
-        fromScheduled: true,
-        originalTxId: t.id
-      }))
+      items: relatedTxs.map(t => {
+        const item = items.find(i => i.id === t.itemId);
+        return {
+          categoryId: item?.categoryId || 'ALL',
+          itemId: t.itemId,
+          quantity: t.quantity,
+          fromScheduled: true,
+          originalTxId: t.id
+        };
+      })
     });
     setIsModalOpen(true);
   };
@@ -289,7 +301,7 @@ export default function Transactions() {
   const addItemRow = () => {
     setFormData(prev => ({
       ...prev,
-      items: [...prev.items, { itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
+      items: [...prev.items, { categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
     }));
   };
 
@@ -512,6 +524,7 @@ export default function Transactions() {
         'Category': category?.name || 'Unknown',
         'Quantity': tx.quantity || 0,
         'Unit': item?.unit || '-',
+        'Sales Person': tx.salesPerson || '-',
         'Created By': createdByDisplay,
         'Source/Destination': tx.sourceDestination || '-',
         'Location': tx.location || '-'
@@ -649,6 +662,7 @@ export default function Transactions() {
                 <th className="px-6 py-4 font-semibold">Type</th>
                 <th className="px-6 py-4 font-semibold">Item</th>
                 <th className="px-6 py-4 font-semibold">Quantity</th>
+                <th className="px-6 py-4 font-semibold">Sales Person</th>
                 <th className="px-6 py-4 font-semibold">Created By</th>
                 <th className="px-6 py-4 font-semibold">Source/Dest</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
@@ -701,6 +715,9 @@ export default function Transactions() {
                           <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tight">From Scheduled</span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-medium text-slate-600">{tx.salesPerson || '-'}</span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
@@ -853,21 +870,36 @@ export default function Transactions() {
                       />
                     </div>
                   </div>
-                  <div className="md:col-span-3">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">
-                      {modalType === 'IN' ? 'Supplier / Source' : 
-                       modalType === 'OUT' ? 'Destination / Usage' :
-                       'Scheduled For / Destination'}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.sourceDestination}
-                      onChange={(e) => setFormData({ ...formData, sourceDestination: e.target.value })}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                      placeholder={modalType === 'IN' ? 'e.g. ABC Suppliers' : 
-                                   modalType === 'OUT' ? 'e.g. Production Line A' :
-                                   'e.g. Customer Name / Order #'}
-                    />
+                  <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        {modalType === 'IN' ? 'Supplier / Source' : 
+                         modalType === 'OUT' ? 'Destination / Usage' :
+                         'Scheduled For / Destination'}
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.sourceDestination}
+                        onChange={(e) => setFormData({ ...formData, sourceDestination: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
+                        placeholder={modalType === 'IN' ? 'e.g. ABC Suppliers' : 
+                                     modalType === 'OUT' ? 'e.g. Production Line A' :
+                                     'e.g. Customer Name / Order #'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Sales Person</label>
+                      <div className="relative">
+                        <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input
+                          type="text"
+                          value={formData.salesPerson}
+                          onChange={(e) => setFormData({ ...formData, salesPerson: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
+                          placeholder="Name of sales person"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -899,7 +931,24 @@ export default function Transactions() {
                           </button>
                         )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="md:col-span-2">
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Category</label>
+                            <select
+                              value={item.categoryId}
+                              disabled={!!editingTransaction}
+                              onChange={(e) => {
+                                updateItemRow(index, 'categoryId', e.target.value);
+                                updateItemRow(index, 'itemId', ''); // Reset item when category changes
+                              }}
+                              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white disabled:bg-slate-50"
+                            >
+                              <option value="ALL">All Categories</option>
+                              {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-1">Select Item</label>
                             <div className="relative">
                               <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -911,11 +960,13 @@ export default function Transactions() {
                                 className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-white disabled:bg-slate-50"
                               >
                                 <option value="">Choose an item...</option>
-                                {items.map(i => (
-                                  <option key={i.id} value={i.id}>
-                                    {i.name} (Avail: {i.currentStock}, Sch: {i.scheduledStock || 0} {i.unit})
-                                  </option>
-                                ))}
+                                {items
+                                  .filter(i => item.categoryId === 'ALL' || i.categoryId === item.categoryId)
+                                  .map(i => (
+                                    <option key={i.id} value={i.id}>
+                                      {i.name} (Avail: {i.currentStock}, Sch: {i.scheduledStock || 0} {i.unit})
+                                    </option>
+                                  ))}
                               </select>
                             </div>
                           </div>

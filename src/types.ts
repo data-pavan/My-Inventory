@@ -21,6 +21,7 @@ export interface Transaction {
   id: string;
   voucherNo: string;
   invoiceNo?: string;
+  salesPerson?: string;
   date: string;
   type: TransactionType;
   itemId: string;
