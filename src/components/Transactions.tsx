@@ -70,6 +70,8 @@ export default function Transactions() {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [isBatchDispatchModalOpen, setIsBatchDispatchModalOpen] = useState(false);
+  const [batchDispatchDate, setBatchDispatchDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [batchFormData, setBatchFormData] = useState({
     invoiceNo: '',
     sourceDestination: '',
@@ -248,7 +250,9 @@ export default function Transactions() {
         sourceDestination: tx.sourceDestination || '',
         location: tx.location || '',
         salesPerson: tx.salesPerson || '',
-        date: format(new Date(tx.date), "yyyy-MM-dd'T'HH:mm"),
+        date: (type === 'OUT' && tx.type === 'SCHEDULED') 
+          ? format(new Date(), "yyyy-MM-dd'T'HH:mm") 
+          : format(new Date(tx.date), "yyyy-MM-dd'T'HH:mm"),
         items: [{ 
           categoryId: item?.categoryId || 'ALL',
           itemId: tx.itemId, 
@@ -443,12 +447,10 @@ export default function Transactions() {
     return matchesSearch && matchesType && matchesStart && matchesEnd;
   });
 
-  const handleBatchDispatch = async () => {
+  const handleBatchDispatch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const scheduledTxs = filteredTransactions.filter(tx => selectedTxIds.includes(tx.id) && tx.type === 'SCHEDULED');
     if (scheduledTxs.length === 0) return toast.error('No scheduled transactions selected');
-
-    const confirm = window.confirm(`Are you sure you want to dispatch all ${scheduledTxs.length} selected items? This will convert them to Stock OUT and adjust inventory.`);
-    if (!confirm) return;
 
     setLoading(true);
     const toastId = toast.loading(`Dispatching ${scheduledTxs.length} items...`);
@@ -472,16 +474,13 @@ export default function Transactions() {
           const scheduledStock = itemInfo.data.scheduledStock || 0;
 
           // Convert SCHEDULED -> OUT
-          // Original SCHEDULED: Stock - Q, Scheduled + Q
-          // To convert to OUT:
-          // We just need to decrement scheduledStock. currentStock was already decremented.
           const newScheduledStock = scheduledStock - tx.quantity;
           if (newScheduledStock < 0) throw new Error(`Invalid scheduled stock for ${itemInfo.data.name}`);
 
           transaction.update(doc(db, 'transactions', tx.id), {
             type: 'OUT',
             fromScheduled: true,
-            date: new Date().toISOString()
+            date: new Date(batchDispatchDate).toISOString()
           });
 
           transaction.update(itemInfo.ref, {
@@ -493,6 +492,7 @@ export default function Transactions() {
       });
       toast.success('Batch dispatch successful', { id: toastId });
       setSelectedTxIds([]);
+      setIsBatchDispatchModalOpen(false);
     } catch (error) {
       toast.dismiss(toastId);
       handleFirestoreError(error, OperationType.UPDATE, 'transactions/batch-dispatch');
@@ -578,7 +578,10 @@ export default function Transactions() {
               </button>
               {filteredTransactions.some(tx => selectedTxIds.includes(tx.id) && tx.type === 'SCHEDULED') && (
                 <button 
-                  onClick={handleBatchDispatch}
+                  onClick={() => {
+                    setBatchDispatchDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+                    setIsBatchDispatchModalOpen(true);
+                  }}
                   className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 animate-in zoom-in duration-200"
                 >
                   <ArrowUpCircle size={20} />
@@ -1183,6 +1186,80 @@ export default function Transactions() {
                 <button
                   type="button"
                   onClick={() => setIsBatchModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Dispatch Modal */}
+      {isBatchDispatchModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 bg-emerald-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-emerald-600 text-white">
+                  <ArrowUpCircle size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Batch Dispatch</h3>
+                  <p className="text-xs text-slate-500 font-medium">Convert selected scheduled items to Stock OUT</p>
+                </div>
+              </div>
+              <button onClick={() => setIsBatchDispatchModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleBatchDispatch} className="p-6 space-y-6">
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-3">
+                  <AlertTriangle className="text-amber-600 shrink-0" size={20} />
+                  <p className="text-sm text-amber-800 leading-relaxed">
+                    You are about to dispatch <strong>{selectedTxIds.length}</strong> items. This will reduce current stock and clear scheduled stock for each item.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Dispatch Date & Time</label>
+                  <div className="relative">
+                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="datetime-local"
+                      required
+                      value={batchDispatchDate}
+                      onChange={(e) => setBatchDispatchDate(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-slate-500 italic">
+                    Default is current time. Adjust if the material left earlier.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-row-reverse gap-3 pt-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-emerald-600 text-white font-semibold py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? (
+                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <ArrowUpCircle size={18} />
+                      Confirm Batch Dispatch
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBatchDispatchModalOpen(false)}
                   className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   Cancel
