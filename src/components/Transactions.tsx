@@ -57,9 +57,15 @@ export default function Transactions() {
   });
 
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'DELETE';
+    type: 'DELETE' | 'BULK_DELETE' | 'PI_DELETE';
     tx?: Transaction;
+    invoiceNo?: string;
+    txIds?: string[];
   } | null>(null);
+
+  const [pin, setPin] = useState('');
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const DELETE_PIN = '202603';
 
   const [formData, setFormData] = useState({
     invoiceNo: '',
@@ -388,53 +394,89 @@ export default function Transactions() {
   };
   
   const executeDelete = async () => {
-    if (!confirmAction?.tx) return;
-    const tx = confirmAction.tx;
+    if (!confirmAction) return;
+    if (pin !== DELETE_PIN) return toast.error('Invalid PIN');
     
-    const toastId = toast.loading('Deleting transaction...');
+    const toastId = toast.loading('Processing deletion...');
     setLoading(true);
     try {
       await runTransaction(db, async (transaction) => {
-        const itemRef = doc(db, 'items', tx.itemId);
-        const itemSnap = await transaction.get(itemRef);
+        let txsToDelete: Transaction[] = [];
         
-        if (!itemSnap.exists()) throw new Error("Item does not exist!");
-        
-        const currentStock = itemSnap.data().currentStock;
-        const scheduledStock = itemSnap.data().scheduledStock || 0;
-        
-        let newStock = currentStock;
-        let newScheduledStock = scheduledStock;
-
-        if (tx.type === 'IN') {
-          newStock = currentStock - tx.quantity;
-        } else if (tx.type === 'OUT') {
-          if (tx.fromScheduled) {
-            newScheduledStock = scheduledStock + tx.quantity;
-          } else {
-            newStock = currentStock + tx.quantity;
-          }
-        } else if (tx.type === 'SCHEDULED') {
-          newStock = currentStock + tx.quantity;
-          newScheduledStock = scheduledStock - tx.quantity;
+        if (confirmAction.type === 'DELETE' && confirmAction.tx) {
+          txsToDelete = [confirmAction.tx];
+        } else if (confirmAction.type === 'BULK_DELETE' && confirmAction.txIds) {
+          txsToDelete = transactions.filter(t => confirmAction.txIds?.includes(t.id));
+        } else if (confirmAction.type === 'PI_DELETE' && confirmAction.invoiceNo) {
+          txsToDelete = transactions.filter(t => t.invoiceNo === confirmAction.invoiceNo);
         }
-        
-        if (newStock < 0) throw new Error("Cannot delete this transaction as it would result in negative stock!");
 
-        transaction.delete(doc(db, 'transactions', tx.id));
-        transaction.update(itemRef, { 
-          currentStock: newStock,
-          scheduledStock: newScheduledStock
-        });
+        if (txsToDelete.length === 0) throw new Error("No transactions found to delete");
+
+        // Group by itemId to minimize reads
+        const itemIds = Array.from(new Set(txsToDelete.map(t => t.itemId)));
+        const itemSnaps = new Map<string, any>();
+        
+        for (const id of itemIds) {
+          const itemRef = doc(db, 'items', id);
+          const itemSnap = await transaction.get(itemRef);
+          if (!itemSnap.exists()) throw new Error(`Item ${id} does not exist!`);
+          itemSnaps.set(id, { ref: itemRef, data: itemSnap.data() });
+        }
+
+        for (const tx of txsToDelete) {
+          const itemInfo = itemSnaps.get(tx.itemId);
+          let currentStock = itemInfo.data.currentStock;
+          let scheduledStock = itemInfo.data.scheduledStock || 0;
+          
+          let newStock = currentStock;
+          let newScheduledStock = scheduledStock;
+
+          if (tx.type === 'IN') {
+            newStock = currentStock - tx.quantity;
+          } else if (tx.type === 'OUT') {
+            if (tx.fromScheduled) {
+              newScheduledStock = scheduledStock + tx.quantity;
+            } else {
+              newStock = currentStock + tx.quantity;
+            }
+          } else if (tx.type === 'SCHEDULED') {
+            newStock = currentStock + tx.quantity;
+            newScheduledStock = scheduledStock - tx.quantity;
+          }
+          
+          if (newStock < 0) throw new Error(`Cannot delete transaction ${tx.voucherNo} as it would result in negative stock for ${itemInfo.data.name}!`);
+
+          transaction.delete(doc(db, 'transactions', tx.id));
+          transaction.update(itemInfo.ref, { 
+            currentStock: newStock,
+            scheduledStock: newScheduledStock
+          });
+
+          // Update local map for subsequent txs of same item
+          itemInfo.data.currentStock = newStock;
+          itemInfo.data.scheduledStock = newScheduledStock;
+        }
       });
-      toast.success('Transaction deleted successfully', { id: toastId });
+      toast.success('Deletion successful', { id: toastId });
+      setSelectedTxIds([]);
     } catch (error) {
       toast.dismiss(toastId);
-      handleFirestoreError(error, OperationType.DELETE, `transactions/${tx.id}`);
+      handleFirestoreError(error, OperationType.DELETE, 'transactions/delete');
     } finally {
       setLoading(false);
       setConfirmAction(null);
+      setPin('');
+      setIsPinModalOpen(false);
     }
+  };
+
+  const initiateDelete = (type: 'DELETE' | 'BULK_DELETE' | 'PI_DELETE', data: any) => {
+    setConfirmAction({
+      type,
+      ...data
+    });
+    setIsPinModalOpen(true);
   };
 
   const filteredTransactions = transactions.filter(tx => {
@@ -596,6 +638,13 @@ export default function Transactions() {
                   <span>Batch Dispatch</span>
                 </button>
               )}
+              <button 
+                onClick={() => initiateDelete('BULK_DELETE', { txIds: selectedTxIds })}
+                className="flex items-center gap-2 bg-rose-600 text-white px-3 py-1.5 rounded-lg hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20 animate-in zoom-in duration-200 text-sm"
+              >
+                <Trash2 size={18} />
+                <span>Bulk Delete</span>
+              </button>
             </div>
           )}
           <button 
@@ -812,12 +861,21 @@ export default function Transactions() {
                           <Edit2 size={16} />
                         </button>
                         <button 
-                          onClick={() => setConfirmAction({ type: 'DELETE', tx })}
+                          onClick={() => initiateDelete('DELETE', { tx })}
                           className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                           title="Delete Transaction"
                         >
                           <Trash2 size={16} />
                         </button>
+                        {tx.invoiceNo && transactions.filter(t => t.invoiceNo === tx.invoiceNo).length > 1 && (
+                          <button 
+                            onClick={() => initiateDelete('PI_DELETE', { invoiceNo: tx.invoiceNo })}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Delete Entire PI"
+                          >
+                            <Trash2 size={16} className="text-rose-400" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1068,6 +1126,19 @@ export default function Transactions() {
                     </>
                   )}
                 </button>
+                {editingTransaction && formData.invoiceNo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeModal();
+                      initiateDelete('PI_DELETE', { invoiceNo: formData.invoiceNo });
+                    }}
+                    className="flex-1 px-4 py-2 bg-rose-50 text-rose-600 border border-rose-200 font-bold rounded-lg hover:bg-rose-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={18} />
+                    Delete Entire PI
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={closeModal}
@@ -1077,40 +1148,6 @@ export default function Transactions() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal */}
-      {confirmAction && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle size={32} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">
-                Delete Transaction
-              </h3>
-              <p className="text-slate-500 mb-6">
-                Are you sure you want to delete transaction {confirmAction.tx?.voucherNo}? This will adjust the item stock accordingly.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setConfirmAction(null)}
-                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={executeDelete}
-                  disabled={loading}
-                  className="flex-1 bg-rose-600 text-white font-semibold py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
-                >
-                  {loading ? 'Processing...' : 'Confirm'}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -1311,6 +1348,60 @@ export default function Transactions() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* PIN Verification Modal */}
+      {isPinModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-rose-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
+                  <AlertTriangle size={20} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900">Confirm Deletion</h3>
+              </div>
+              <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600">
+                {confirmAction?.type === 'BULK_DELETE' ? `Are you sure you want to delete ${confirmAction.txIds?.length} selected transactions?` :
+                 confirmAction?.type === 'PI_DELETE' ? `Are you sure you want to delete all transactions for PI: ${confirmAction.invoiceNo}?` :
+                 'Are you sure you want to delete this transaction?'}
+                <br />
+                <span className="font-bold text-rose-600">This action cannot be undone and stock will be adjusted.</span>
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Enter PIN to Confirm</label>
+                <input
+                  type="password"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 outline-none text-center text-xl tracking-[1em] font-bold"
+                  placeholder="••••••"
+                  maxLength={6}
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsPinModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executeDelete}
+                  disabled={loading || pin.length < 6}
+                  className="flex-1 bg-rose-600 text-white font-semibold py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Processing...' : 'Delete Now'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
