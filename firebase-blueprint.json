@@ -36,10 +36,13 @@
         "quantity": { "type": "number", "description": "Quantity moved" },
         "sourceDestination": { "type": "string", "description": "Supplier or Destination" },
         "location": { "type": "string", "description": "Storage location" },
+        "totalBoxes": { "type": "number", "description": "Total number of boxes" },
         "createdBy": { "type": "string", "description": "User ID who created the transaction" },
+        "creatorEmail": { "type": "string", "description": "Email of the creator" },
+        "creatorRole": { "type": "string", "description": "Role of the creator" },
         "fromScheduled": { "type": "boolean", "description": "Whether to dispatch from scheduled stock" }
       },
-      "required": ["voucherNo", "date", "type", "itemId", "quantity", "createdBy"]
+      "required": ["voucherNo", "date", "type", "itemId", "quantity", "createdBy", "creatorEmail", "creatorRole"]
     },
     "User": {
       "title": "User",

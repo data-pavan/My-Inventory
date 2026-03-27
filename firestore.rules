@@ -37,6 +37,8 @@
 //   - sourceDestination: string (optional)
 //   - location: string (optional)
 //   - createdBy: string (required)
+//   - creatorEmail: string (required)
+//   - creatorRole: string (required)
 //
 // ===============================================================
 
@@ -113,6 +115,9 @@ service cloud.firestore {
              data.get('itemId', '') is string &&
              data.get('quantity', 0) is number &&
              data.get('createdBy', '') == request.auth.uid &&
+             data.get('creatorEmail', '') is string &&
+             data.get('creatorRole', '') in ['admin', 'staff'] &&
+             (!('totalBoxes' in data) || data.get('totalBoxes', 0) is number) &&
              (!('fromScheduled' in data) || data.get('fromScheduled', false) is bool);
     }
 

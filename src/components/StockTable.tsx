@@ -101,116 +101,210 @@ export default function StockTable() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+    <div className="space-y-4 pb-20 md:pb-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Current Stock Inventory</h1>
           <p className="text-xs text-slate-500">Real-time monitoring of all items and stock levels</p>
         </div>
         <button 
           onClick={exportToExcel}
-          className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm text-sm"
+          className="flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm text-sm font-medium"
         >
-          <Download size={16} />
-          <span>Export Stock Report</span>
+          <Download size={18} />
+          <span>Export Report</span>
         </button>
       </div>
 
       {/* Global Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-2">
-            <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
-              <TrendingUp size={18} />
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <TrendingUp size={20} />
           </div>
-          <p className="text-slate-500 text-xs font-medium">Total Stock In</p>
-          <p className="text-xl font-bold text-slate-900 mt-0.5">{globalStats.stockIn}</p>
-          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">In Selected Range</p>
+          <div>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Stock In</p>
+            <p className="text-xl font-bold text-slate-900">{globalStats.stockIn}</p>
+          </div>
         </div>
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-2">
-            <div className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
-              <TrendingDown size={18} />
-            </div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+          <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
+            <TrendingDown size={20} />
           </div>
-          <p className="text-slate-500 text-xs font-medium">Total Stock Out</p>
-          <p className="text-xl font-bold text-slate-900 mt-0.5">{globalStats.stockOut}</p>
-          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">In Selected Range</p>
+          <div>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Stock Out</p>
+            <p className="text-xl font-bold text-slate-900">{globalStats.stockOut}</p>
+          </div>
         </div>
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-2">
-            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
-              <AlertTriangle size={18} />
-            </div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+          <div className={`p-3 rounded-xl ${globalStats.lowStockCount > 0 ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-amber-50 text-amber-600'}`}>
+            <AlertTriangle size={20} />
           </div>
-          <p className="text-slate-500 text-xs font-medium">Low Stock Items</p>
-          <p className="text-xl font-bold text-slate-900 mt-0.5">{globalStats.lowStockCount}</p>
-          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">Requires Attention</p>
+          <div>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Low Stock</p>
+            <p className="text-xl font-bold text-slate-900">{globalStats.lowStockCount}</p>
+          </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="relative">
+      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+          <div className="lg:col-span-5 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input 
               type="text" 
               placeholder="Search items..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
             />
           </div>
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 shadow-sm">
-            <CalendarIcon size={14} className="text-slate-400" />
-            <input 
-              type="date"
-              value={dateRange.start}
-              onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-              className="text-xs font-medium outline-none bg-transparent flex-1 min-w-[110px] cursor-pointer"
-            />
-            <span className="text-slate-400 text-xs">to</span>
-            <input 
-              type="date"
-              value={dateRange.end}
-              onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-              className="text-xs font-medium outline-none bg-transparent flex-1 min-w-[110px] cursor-pointer"
-            />
+          
+          <div className="lg:col-span-4 flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              <CalendarIcon size={16} className="text-slate-400 shrink-0" />
+              <div className="flex items-center gap-1 w-full">
+                <input 
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  className="bg-transparent border-none p-0 text-xs focus:ring-0 w-full outline-none"
+                />
+                <span className="text-slate-400 text-xs">to</span>
+                <input 
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  className="bg-transparent border-none p-0 text-xs focus:ring-0 w-full outline-none"
+                />
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-slate-400" />
-            <select 
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
-            >
-              <option value="ALL">All Categories</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-slate-400" />
-            <select 
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
-            >
-              <option value="ALL">All Status</option>
-              <option value="LOW">Low Stock Only</option>
-              <option value="OK">Healthy Stock Only</option>
-            </select>
+
+          <div className="lg:col-span-3 grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2">
+              <Filter size={14} className="text-slate-400 shrink-0" />
+              <select 
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="bg-transparent border-none p-0 focus:ring-0 w-full text-[10px] font-bold uppercase outline-none"
+              >
+                <option value="ALL">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2">
+              <AlertTriangle size={14} className="text-slate-400 shrink-0" />
+              <select 
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="bg-transparent border-none p-0 focus:ring-0 w-full text-[10px] font-bold uppercase outline-none"
+              >
+                <option value="ALL">All Status</option>
+                <option value="LOW">Low Stock</option>
+                <option value="OK">Healthy</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Stock Grid */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      {/* Mobile View - Cards */}
+      <div className="md:hidden space-y-4 px-1">
+        {filteredItems.length === 0 ? (
+          <div className="bg-white p-12 rounded-2xl border-2 border-dashed border-slate-100 text-center">
+            <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Package className="text-slate-300" size={32} />
+            </div>
+            <p className="text-slate-600 font-bold">No items found</p>
+            <p className="text-slate-400 text-xs mt-1">Try adjusting your search or filters</p>
+          </div>
+        ) : (
+          filteredItems.map((item) => {
+            const category = categories.find(c => c.id === item.categoryId);
+            const isLow = item.currentStock <= item.minStock;
+            
+            const itemTxs = transactions.filter(tx => tx.itemId === item.id);
+            const stockIn = itemTxs
+              .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+              .reduce((acc, tx) => acc + tx.quantity, 0);
+            const stockOut = itemTxs
+              .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+              .reduce((acc, tx) => acc + tx.quantity, 0);
+
+            return (
+              <div 
+                key={item.id} 
+                className={`bg-white rounded-2xl border-2 transition-all active:scale-[0.98] overflow-hidden ${
+                  isLow ? 'border-rose-100 bg-rose-50/5 shadow-lg shadow-rose-500/5' : 'border-slate-50 shadow-sm'
+                }`}
+              >
+                <div className="p-4">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                        isLow ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        <Package size={22} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm leading-tight">{item.name}</h3>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{category?.name || 'Unknown'}</p>
+                      </div>
+                    </div>
+                    {isLow ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black bg-rose-100 text-rose-700 uppercase tracking-widest animate-pulse">
+                        <AlertTriangle size={10} />
+                        Low Stock
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-700 uppercase tracking-widest">
+                        <CheckCircle2 size={10} />
+                        Healthy
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50/50 rounded-2xl border border-slate-100/50">
+                    <div className="text-center">
+                      <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">In</span>
+                      <span className="text-sm font-black text-emerald-600">{stockIn}</span>
+                    </div>
+                    <div className="text-center border-x border-slate-200/50">
+                      <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">Out</span>
+                      <span className="text-sm font-black text-rose-600">{stockOut}</span>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">Current</span>
+                      <div className="flex items-center justify-center gap-0.5">
+                        <span className={`text-sm font-black ${isLow ? 'text-rose-600' : 'text-slate-900'}`}>{item.currentStock}</span>
+                        <span className="text-[9px] text-slate-400 font-bold">{item.unit}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Min Stock: {item.minStock}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Scheduled:</span>
+                      <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg">{item.scheduledStock || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop View - Table */}
+      <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -279,13 +373,6 @@ export default function StockTable() {
                   </tr>
                 );
               })}
-              {filteredItems.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400 italic text-sm">
-                    No items found matching your filters.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

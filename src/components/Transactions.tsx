@@ -32,12 +32,16 @@ import {
   X,
   Trash2,
   AlertTriangle,
-  Edit2
+  Edit2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { useAuth } from '../App';
 
 export default function Transactions() {
+  const { profile } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -72,6 +76,7 @@ export default function Transactions() {
     sourceDestination: '',
     location: '',
     salesPerson: '',
+    totalBoxes: 0,
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
   });
@@ -100,16 +105,21 @@ export default function Transactions() {
     const unsubCats = onSnapshot(collection(db, 'categories'), (snap) => {
       setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
     });
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      setUsers(snap.docs.map(doc => doc.data() as UserProfile));
-    });
+
+    let unsubUsers = () => {};
+    if (profile?.role === 'admin') {
+      unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+        setUsers(snap.docs.map(doc => doc.data() as UserProfile));
+      });
+    }
+
     return () => {
       unsubTx();
       unsubItems();
       unsubCats();
       unsubUsers();
     };
-  }, []);
+  }, [profile]);
 
   const generateVoucherNo = () => {
     const prefix = modalType === 'IN' ? 'VIN' : modalType === 'OUT' ? 'VOUT' : 'VSCH';
@@ -207,6 +217,7 @@ export default function Transactions() {
               sourceDestination: formData.sourceDestination,
               location: formData.location,
               salesPerson: formData.salesPerson,
+              totalBoxes: formData.totalBoxes,
               date: new Date(formData.date).toISOString(),
               type: modalType,
               fromScheduled: entry.fromScheduled
@@ -219,9 +230,12 @@ export default function Transactions() {
               sourceDestination: formData.sourceDestination,
               location: formData.location,
               salesPerson: formData.salesPerson,
+              totalBoxes: formData.totalBoxes,
               voucherNo,
               type: modalType,
               createdBy: auth.currentUser?.uid,
+              creatorEmail: profile?.email || auth.currentUser?.email || 'Unknown',
+              creatorRole: profile?.role || 'staff',
               date: new Date(formData.date).toISOString(),
               fromScheduled: entry.fromScheduled
             };
@@ -497,6 +511,27 @@ export default function Transactions() {
     return matchesSearch && matchesInvoice && matchesSalesPerson && matchesSourceDest && matchesType && matchesStart && matchesEnd;
   });
 
+  const [expandedVouchers, setExpandedVouchers] = useState<string[]>([]);
+
+  const toggleVoucher = (voucherNo: string) => {
+    setExpandedVouchers(prev => 
+      prev.includes(voucherNo) ? prev.filter(v => v !== voucherNo) : [...prev, voucherNo]
+    );
+  };
+
+  const groupedTransactions = React.useMemo(() => {
+    const groups: { [key: string]: Transaction[] } = {};
+    filteredTransactions.forEach(tx => {
+      if (!groups[tx.voucherNo]) {
+        groups[tx.voucherNo] = [];
+      }
+      groups[tx.voucherNo].push(tx);
+    });
+    return Object.values(groups).sort((a, b) => 
+      new Date(b[0].date).getTime() - new Date(a[0].date).getTime()
+    );
+  }, [filteredTransactions]);
+
   const handleBatchDispatch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const scheduledTxs = filteredTransactions.filter(tx => selectedTxIds.includes(tx.id) && tx.type === 'SCHEDULED');
@@ -555,15 +590,10 @@ export default function Transactions() {
     const data = filteredTransactions.map(tx => {
       const item = items.find(i => i.id === tx.itemId);
       const category = categories.find(c => c.id === item?.categoryId);
-      const creator = users.find(u => u.uid === tx.createdBy);
       
-      let createdByDisplay = 'System';
-      if (creator) {
-        createdByDisplay = `${creator.email.split('@')[0]} (${creator.role})`;
-      } else if (tx.createdBy) {
-        // Fallback for old transactions or if user data hasn't loaded
-        createdByDisplay = tx.createdBy.substring(0, 8) + '...';
-      }
+      let createdByDisplay = tx.creatorEmail 
+        ? `${tx.creatorEmail.split('@')[0]} (${tx.creatorRole || 'staff'})`
+        : (tx.createdBy ? tx.createdBy.substring(0, 8) + '...' : 'System');
 
       return {
         'Voucher No': tx.voucherNo,
@@ -577,7 +607,8 @@ export default function Transactions() {
         'Sales Person': tx.salesPerson || '-',
         'Created By': createdByDisplay,
         'Source/Destination': tx.sourceDestination || '-',
-        'Location': tx.location || '-'
+        'Location': tx.location || '-',
+        'Total Boxes': tx.totalBoxes || 0
       };
     });
 
@@ -589,156 +620,394 @@ export default function Transactions() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Transaction History</h1>
-          <p className="text-xs text-slate-500">Track all stock movements and vouchers</p>
+    <div className="space-y-4 pb-24 md:pb-8">
+      {/* Header Section */}
+      <div className="flex flex-col gap-4 px-1 sm:px-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Transactions</h1>
+            <p className="text-[11px] md:text-sm text-slate-500 font-medium">Manage your stock movements</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <button 
+              onClick={exportToExcel}
+              className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-50 transition-all shadow-sm text-sm font-bold"
+            >
+              <Download size={18} />
+              <span>Export</span>
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+
+        {/* Action Buttons - Mobile Optimized */}
+        <div className="grid grid-cols-3 gap-2">
           <button 
             onClick={() => openModal('IN')}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 text-sm"
+            className="flex flex-col items-center justify-center gap-1.5 bg-emerald-600 text-white p-3 rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 active:scale-95"
           >
-            <ArrowDownCircle size={18} />
-            <span>Stock IN</span>
+            <ArrowDownCircle size={20} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Stock IN</span>
           </button>
           <button 
             onClick={() => openModal('OUT')}
-            className="flex items-center gap-2 bg-rose-600 text-white px-3 py-1.5 rounded-lg hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20 text-sm"
+            className="flex flex-col items-center justify-center gap-1.5 bg-rose-600 text-white p-3 rounded-2xl hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20 active:scale-95"
           >
-            <ArrowUpCircle size={18} />
-            <span>Stock OUT</span>
+            <ArrowUpCircle size={20} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Stock OUT</span>
           </button>
           <button 
             onClick={() => openModal('SCHEDULED')}
-            className="flex items-center gap-2 bg-amber-600 text-white px-3 py-1.5 rounded-lg hover:bg-amber-700 transition-colors shadow-lg shadow-amber-600/20 text-sm"
+            className="flex flex-col items-center justify-center gap-1.5 bg-amber-600 text-white p-3 rounded-2xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-600/20 active:scale-95"
           >
-            <Clock size={18} />
-            <span>Scheduled</span>
-          </button>
-          {selectedTxIds.length > 0 && (
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setIsBatchModalOpen(true)}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20 animate-in zoom-in duration-200 text-sm"
-              >
-                <Edit2 size={18} />
-                <span>Batch Edit ({selectedTxIds.length})</span>
-              </button>
-              {filteredTransactions.some(tx => selectedTxIds.includes(tx.id) && tx.type === 'SCHEDULED') && (
-                <button 
-                  onClick={() => {
-                    setBatchDispatchDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-                    setIsBatchDispatchModalOpen(true);
-                  }}
-                  className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 animate-in zoom-in duration-200 text-sm"
-                >
-                  <ArrowUpCircle size={18} />
-                  <span>Batch Dispatch</span>
-                </button>
-              )}
-              <button 
-                onClick={() => initiateDelete('BULK_DELETE', { txIds: selectedTxIds })}
-                className="flex items-center gap-2 bg-rose-600 text-white px-3 py-1.5 rounded-lg hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20 animate-in zoom-in duration-200 text-sm"
-              >
-                <Trash2 size={18} />
-                <span>Bulk Delete</span>
-              </button>
-            </div>
-          )}
-          <button 
-            onClick={exportToExcel}
-            className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm text-sm"
-          >
-            <Download size={16} />
-            <span>Export Excel</span>
+            <Clock size={20} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Scheduled</span>
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 space-y-2">
-        <div className="flex flex-col md:flex-row gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+      {/* Selection Toolbar */}
+      {selectedTxIds.length > 0 && (
+        <div className="sticky top-4 z-30 bg-indigo-600 text-white p-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 mx-1 sm:mx-0">
+          <div className="bg-white/20 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+            {selectedTxIds.length} Selected
+          </div>
+          <div className="flex gap-1.5 flex-1 overflow-x-auto no-scrollbar">
+            <button 
+              onClick={() => setIsBatchModalOpen(true)}
+              className="shrink-0 flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-xl transition-colors text-[10px] font-bold uppercase"
+            >
+              <Edit2 size={14} />
+              <span>Edit</span>
+            </button>
+            {filteredTransactions.some(tx => selectedTxIds.includes(tx.id) && tx.type === 'SCHEDULED') && (
+              <button 
+                onClick={() => {
+                  setBatchDispatchDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+                  setIsBatchDispatchModalOpen(true);
+                }}
+                className="shrink-0 flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 rounded-xl transition-colors text-[10px] font-bold uppercase"
+              >
+                <ArrowUpCircle size={14} />
+                <span>Dispatch</span>
+              </button>
+            )}
+            <button 
+              onClick={() => initiateDelete('BULK_DELETE', { txIds: selectedTxIds })}
+              className="shrink-0 flex items-center gap-1.5 bg-rose-500 hover:bg-rose-600 px-3 py-1.5 rounded-xl transition-colors text-[10px] font-bold uppercase"
+            >
+              <Trash2 size={14} />
+              <span>Delete</span>
+            </button>
+          </div>
+          <button 
+            onClick={() => setSelectedTxIds([])}
+            className="p-1 hover:bg-white/10 rounded-full transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+      )}
+
+      {/* Search & Filters Section */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-4 mx-1 sm:mx-0">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          <div className="md:col-span-7 relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
             <input 
               type="text" 
-              placeholder="Search by item or voucher..." 
+              placeholder="Search items or voucher..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
+              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-blue-500 transition-all text-sm font-medium"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <CalendarIcon size={14} className="text-slate-400" />
-              <input 
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
-              />
-              <span className="text-slate-400 text-[10px]">to</span>
-              <input 
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none"
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Filter size={14} className="text-slate-400" />
+          
+          <div className="md:col-span-5 flex gap-2">
+            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
+              <Filter size={18} className="text-slate-400" />
               <select 
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500/20 outline-none text-[10px] font-medium"
+                className="bg-transparent border-none p-0 focus:ring-0 w-full text-sm font-bold text-slate-700 outline-none appearance-none"
               >
-                <option value="ALL">All Types</option>
+                <option value="ALL">All Movements</option>
                 <option value="IN">Stock IN</option>
                 <option value="OUT">Stock OUT</option>
                 <option value="SCHEDULED">Scheduled</option>
               </select>
             </div>
+            <button 
+              onClick={exportToExcel}
+              className="sm:hidden flex items-center justify-center w-12 bg-slate-50 border border-slate-100 rounded-2xl text-slate-600 active:scale-95 transition-all"
+            >
+              <Download size={20} />
+            </button>
           </div>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t border-slate-50">
+
+        {/* Advanced Filters Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="relative">
-            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold uppercase">PI:</div>
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">PI</div>
             <input 
               type="text" 
-              placeholder="Invoice/PI No..." 
+              placeholder="Invoice No..." 
               value={searchInvoice}
               onChange={(e) => setSearchInvoice(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
             />
           </div>
           <div className="relative">
-            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold uppercase">Sales:</div>
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">By</div>
             <input 
               type="text" 
               placeholder="Sales Person..." 
               value={searchSalesPerson}
               onChange={(e) => setSearchSalesPerson(e.target.value)}
-              className="w-full pl-12 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
             />
           </div>
           <div className="relative">
-            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold uppercase">Loc:</div>
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">To</div>
             <input 
               type="text" 
-              placeholder="Source/Destination..." 
+              placeholder="Source/Dest..." 
               value={searchSourceDest}
               onChange={(e) => setSearchSourceDest(e.target.value)}
-              className="w-full pl-10 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-xs"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
             />
+          </div>
+          <div className="flex items-center gap-2 bg-slate-50/50 border border-slate-100 rounded-xl px-3 py-2">
+            <CalendarIcon size={14} className="text-slate-400 shrink-0" />
+            <div className="flex items-center gap-1 w-full">
+              <input 
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                className="bg-transparent border-none p-0 text-[10px] font-bold focus:ring-0 w-full outline-none"
+              />
+              <span className="text-slate-300">-</span>
+              <input 
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                className="bg-transparent border-none p-0 text-[10px] font-bold focus:ring-0 w-full outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      {/* Mobile View - Grouped Cards */}
+      <div className="md:hidden space-y-4 px-1">
+        {groupedTransactions.length === 0 ? (
+          <div className="bg-white p-12 rounded-2xl border-2 border-dashed border-slate-100 text-center">
+            <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="text-slate-300" size={32} />
+            </div>
+            <p className="text-slate-600 font-bold">No results found</p>
+            <p className="text-slate-400 text-xs mt-1">Try adjusting your search or filters</p>
+          </div>
+        ) : (
+          groupedTransactions.map((group) => {
+            const firstTx = group[0];
+            const voucherNo = firstTx.voucherNo;
+            const isExpanded = expandedVouchers.includes(voucherNo);
+            const allSelected = group.every(tx => selectedTxIds.includes(tx.id));
+            const someSelected = group.some(tx => selectedTxIds.includes(tx.id));
+            
+            return (
+              <div 
+                key={voucherNo} 
+                className={`bg-white rounded-2xl border-2 transition-all overflow-hidden ${
+                  allSelected ? 'border-indigo-500 shadow-lg shadow-indigo-500/10' : 
+                  someSelected ? 'border-indigo-300 shadow-sm' : 'border-slate-50 shadow-sm'
+                }`}
+              >
+                {/* Card Header - Click to Expand */}
+                <div 
+                  className="p-4 cursor-pointer active:bg-slate-50 transition-colors"
+                  onClick={() => toggleVoucher(voucherNo)}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        firstTx.type === 'IN' ? 'bg-emerald-50 text-emerald-600' : 
+                        firstTx.type === 'OUT' ? 'bg-rose-50 text-rose-600' : 
+                        'bg-amber-50 text-amber-600'
+                      }`}>
+                        {firstTx.type === 'IN' ? <ArrowDownCircle size={22} /> : 
+                         firstTx.type === 'OUT' ? <ArrowUpCircle size={22} /> : 
+                         <Clock size={22} />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-black text-slate-900 text-sm uppercase tracking-tight">
+                            {firstTx.type} Entry
+                          </h3>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{voucherNo}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] font-bold text-slate-500">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</span>
+                          <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                          <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{group.length} {group.length === 1 ? 'Item' : 'Items'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="text-slate-400">
+                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </div>
+                      {firstTx.invoiceNo && (
+                        <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                          {firstTx.invoiceNo}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-50">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500 border border-slate-200 shrink-0">
+                        {firstTx.salesPerson?.[0].toUpperCase() || 'S'}
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-500 truncate">{firstTx.salesPerson || 'No Sales Person'}</span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-end min-w-0">
+                      <MapPin size={10} className="text-slate-400 shrink-0" />
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate text-right">
+                        {firstTx.sourceDestination || firstTx.location || 'No Location'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded Items List */}
+                {isExpanded && (
+                  <div className="border-t border-slate-50 bg-slate-50/30 animate-in slide-in-from-top-2 duration-200">
+                    {/* Full Details Section */}
+                    <div className="p-4 bg-white border-b border-slate-100 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Source/Destination</p>
+                        <p className="text-[10px] font-bold text-slate-700">{firstTx.sourceDestination || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Location</p>
+                        <p className="text-[10px] font-bold text-slate-700">{firstTx.location || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Invoice/PI No</p>
+                        <p className="text-[10px] font-bold text-slate-700">{firstTx.invoiceNo || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                        <p className="text-[10px] font-bold text-slate-700">{firstTx.salesPerson || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Boxes</p>
+                        <p className="text-[10px] font-bold text-slate-700">{firstTx.totalBoxes || 0}</p>
+                      </div>
+                      <div className="sm:col-span-2 lg:col-span-1">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Creator</p>
+                        <p className="text-[10px] font-bold text-slate-700 truncate">{firstTx.creatorEmail}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-2 space-y-2">
+                      {group.map((tx) => {
+                        const item = items.find(i => i.id === tx.itemId);
+                        const isTxSelected = selectedTxIds.includes(tx.id);
+                        return (
+                          <div 
+                            key={tx.id}
+                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                              isTxSelected ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100'
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSelectTx(tx.id);
+                            }}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-2 h-2 rounded-full ${
+                                tx.type === 'IN' ? 'bg-emerald-500' : 
+                                tx.type === 'OUT' ? 'bg-rose-500' : 
+                                'bg-amber-500'
+                              }`} />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{item?.name || 'Unknown Item'}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                  {categories.find(c => c.id === item?.categoryId)?.name || 'General'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <p className="text-sm font-black text-slate-900">{tx.quantity}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{item?.unit}</p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openModal(tx.type, tx);
+                                  }}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    initiateDelete('DELETE', { tx });
+                                  }}
+                                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Batch Actions for this Voucher */}
+                    <div className="p-3 bg-slate-100/50 flex justify-between items-center">
+                      <button 
+                        onClick={() => {
+                          const allIds = group.map(t => t.id);
+                          const areAllSelected = allIds.every(id => selectedTxIds.includes(id));
+                          if (areAllSelected) {
+                            setSelectedTxIds(prev => prev.filter(id => !allIds.includes(id)));
+                          } else {
+                            setSelectedTxIds(prev => Array.from(new Set([...prev, ...allIds])));
+                          }
+                        }}
+                        className="text-[10px] font-black uppercase tracking-widest text-indigo-600"
+                      >
+                        {allSelected ? 'Deselect All' : 'Select All Items'}
+                      </button>
+                      {firstTx.invoiceNo && (
+                        <button 
+                          onClick={() => initiateDelete('PI_DELETE', { invoiceNo: firstTx.invoiceNo })}
+                          className="text-[10px] font-black uppercase tracking-widest text-rose-600 flex items-center gap-1"
+                        >
+                          <Trash2 size={12} />
+                          Delete PI
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop View - Table */}
+      <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -753,13 +1022,14 @@ export default function Transactions() {
                 </th>
                 <th className="px-4 py-3 font-semibold">Voucher No</th>
                 <th className="px-4 py-3 font-semibold">Invoice/PI</th>
-                <th className="px-4 py-3 font-semibold">Date</th>
+                <th className="px-4 py-3 font-semibold hidden xl:table-cell">Date</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
                 <th className="px-4 py-3 font-semibold">Item</th>
-                <th className="px-4 py-3 font-semibold">Quantity</th>
-                <th className="px-4 py-3 font-semibold">Sales Person</th>
-                <th className="px-4 py-3 font-semibold">Created By</th>
-                <th className="px-4 py-3 font-semibold">Source/Dest</th>
+                <th className="px-4 py-3 font-semibold">Qty</th>
+                <th className="px-4 py-3 font-semibold hidden md:table-cell">Boxes</th>
+                <th className="px-4 py-3 font-semibold hidden 2xl:table-cell">Sales Person</th>
+                <th className="px-4 py-3 font-semibold hidden 2xl:table-cell">Created By</th>
+                <th className="px-4 py-3 font-semibold hidden lg:table-cell">Source/Dest</th>
                 <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -779,7 +1049,7 @@ export default function Transactions() {
                     </td>
                     <td className="px-4 py-3 font-bold text-slate-900 text-sm">{tx.voucherNo}</td>
                     <td className="px-4 py-3 text-xs text-slate-600 font-medium">{tx.invoiceNo || '-'}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600">
+                    <td className="px-4 py-3 text-xs text-slate-600 hidden xl:table-cell">
                       {format(new Date(tx.date), 'MMM dd, yyyy HH:mm')}
                     </td>
                     <td className="px-4 py-3">
@@ -811,20 +1081,23 @@ export default function Transactions() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="text-xs font-bold text-slate-900">{tx.totalBoxes || 0}</span>
+                    </td>
+                    <td className="px-4 py-3 hidden 2xl:table-cell">
                       <span className="text-xs font-medium text-slate-600">{tx.salesPerson || '-'}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 hidden 2xl:table-cell">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-medium text-slate-600 truncate max-w-[100px]" title={users.find(u => u.uid === tx.createdBy)?.email || tx.createdBy}>
-                          {users.find(u => u.uid === tx.createdBy)?.email?.split('@')[0] || 'Unknown'}
+                        <span className="text-[10px] font-medium text-slate-600 truncate max-w-[100px]" title={tx.creatorEmail || tx.createdBy}>
+                          {tx.creatorEmail?.split('@')[0] || 'Unknown'}
                         </span>
                         <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">
-                          {users.find(u => u.uid === tx.createdBy)?.role || 'staff'}
+                          {tx.creatorRole || 'staff'}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[120px]">
+                    <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[120px] hidden lg:table-cell">
                       {tx.sourceDestination || '-'}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -895,15 +1168,15 @@ export default function Transactions() {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
-            <div className={`p-6 border-b border-slate-100 flex items-center justify-between shrink-0 ${
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom sm:zoom-in duration-300 flex flex-col">
+            <div className={`p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between shrink-0 ${
               modalType === 'IN' ? 'bg-emerald-50' : 
               modalType === 'OUT' ? 'bg-rose-50' :
               'bg-amber-50'
             }`}>
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${
+                <div className={`p-2 rounded-xl ${
                   modalType === 'IN' ? 'bg-emerald-600 text-white' : 
                   modalType === 'OUT' ? 'bg-rose-600 text-white' :
                   'bg-amber-600 text-white'
@@ -913,236 +1186,237 @@ export default function Transactions() {
                    <Clock size={24} />}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">
-                    Material {modalType} {editingTransaction ? 'Edit' : 'Entry'}
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-tight">
+                    {modalType} {editingTransaction ? 'Edit' : 'Entry'}
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium">Voucher: {editingTransaction ? editingTransaction.voucherNo : generateVoucherNo()}</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Voucher: {editingTransaction ? editingTransaction.voucherNo : generateVoucherNo()}</p>
                 </div>
               </div>
-              <button onClick={closeModal} className="text-slate-400 hover:text-slate-600">
+              <button onClick={closeModal} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
                 <X size={24} />
               </button>
             </div>
             
             <form 
               onSubmit={handleSubmit} 
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  const target = e.target as HTMLElement;
-                  if (target.tagName !== 'SELECT' && target.tagName !== 'INPUT') {
-                    handleSubmit(e);
-                  }
-                }
-              }}
               className="flex-1 flex flex-col min-h-0"
             >
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Invoice / PI No</label>
-                    <input
-                      type="text"
-                      value={formData.invoiceNo}
-                      onChange={(e) => setFormData({ ...formData, invoiceNo: e.target.value })}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                      placeholder="e.g. INV-2024-001"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Date & Time</label>
-                    <div className="relative">
-                      <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <input
-                        type="datetime-local"
-                        required
-                        value={formData.date}
-                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Location</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                {/* Header Info Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Invoice / PI No</label>
                       <input
                         type="text"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                        placeholder="e.g. Warehouse A"
+                        value={formData.invoiceNo}
+                        onChange={(e) => setFormData({ ...formData, invoiceNo: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                        placeholder="INV-001"
                       />
                     </div>
-                  </div>
-                  <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date & Time</label>
+                      <div className="relative">
+                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          type="datetime-local"
+                          required
+                          value={formData.date}
+                          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Location</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          type="text"
+                          value={formData.location}
+                          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                          placeholder="Warehouse"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Total Boxes</label>
+                      <div className="relative">
+                        <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          type="number"
+                          value={formData.totalBoxes || ''}
+                          onChange={(e) => setFormData({ ...formData, totalBoxes: parseInt(e.target.value) || 0 })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
                         {modalType === 'IN' ? 'Supplier / Source' : 
                          modalType === 'OUT' ? 'Destination / Usage' :
-                         'Scheduled For / Destination'}
+                         'Scheduled For'}
                       </label>
                       <input
                         type="text"
                         value={formData.sourceDestination}
                         onChange={(e) => setFormData({ ...formData, sourceDestination: e.target.value })}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                        placeholder={modalType === 'IN' ? 'e.g. ABC Suppliers' : 
-                                     modalType === 'OUT' ? 'e.g. Production Line A' :
-                                     'e.g. Customer Name / Order #'}
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                        placeholder="Entity Name"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Sales Person</label>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Sales Person</label>
                       <div className="relative">
-                        <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                           type="text"
                           value={formData.salesPerson}
                           onChange={(e) => setFormData({ ...formData, salesPerson: e.target.value })}
-                          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                          placeholder="Name of sales person"
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                          placeholder="Name"
                         />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="md:col-span-2 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Items List</h4>
+                {/* Items List */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Items to {modalType}</h4>
                     {!editingTransaction && (
                       <button 
                         type="button"
                         onClick={addItemRow}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-bold flex items-center gap-1"
+                        className="text-blue-600 hover:text-blue-700 text-[10px] font-black uppercase tracking-widest flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-xl transition-all active:scale-95"
                       >
-                        <Plus size={16} />
-                        Add Another Item
+                        <Plus size={14} />
+                        Add Item
                       </button>
                     )}
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {formData.items.map((item, index) => (
-                      <div key={index} className="p-4 border border-slate-100 rounded-xl bg-white shadow-sm space-y-4 relative">
+                      <div key={index} className="p-4 border-2 border-slate-50 rounded-2xl bg-white shadow-sm space-y-4 relative animate-in slide-in-from-right-4 duration-300">
                         {formData.items.length > 1 && (
                           <button 
                             type="button"
                             onClick={() => removeItemRow(index)}
-                            className="absolute top-2 right-2 text-slate-400 hover:text-rose-600"
+                            className="absolute -top-2 -right-2 w-8 h-8 bg-white border-2 border-slate-50 text-slate-400 hover:text-rose-600 rounded-full flex items-center justify-center shadow-sm transition-colors"
                           >
-                            <X size={18} />
+                            <X size={16} />
                           </button>
                         )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Category</label>
-                            <select
-                              value={item.categoryId}
-                              disabled={!!editingTransaction}
-                              onChange={(e) => {
-                                updateItemRow(index, 'categoryId', e.target.value);
-                                updateItemRow(index, 'itemId', ''); // Reset item when category changes
-                              }}
-                              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white disabled:bg-slate-50"
-                            >
-                              <option value="ALL">All Categories</option>
-                              {categories.map(cat => (
-                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Select Item</label>
-                            <div className="relative">
-                              <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Category</label>
                               <select
-                                required
+                                value={item.categoryId}
                                 disabled={!!editingTransaction}
-                                value={item.itemId}
-                                onChange={(e) => updateItemRow(index, 'itemId', e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-white disabled:bg-slate-50"
+                                onChange={(e) => {
+                                  updateItemRow(index, 'categoryId', e.target.value);
+                                  updateItemRow(index, 'itemId', '');
+                                }}
+                                className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-xs font-bold disabled:opacity-50 appearance-none"
                               >
-                                <option value="">Choose an item...</option>
-                                {items
-                                  .filter(i => item.categoryId === 'ALL' || i.categoryId === item.categoryId)
-                                  .map(i => (
-                                    <option key={i.id} value={i.id}>
-                                      {i.name} (Avail: {i.currentStock}, Sch: {i.scheduledStock || 0} {i.unit})
-                                    </option>
-                                  ))}
+                                <option value="ALL">All Categories</option>
+                                {categories.map(cat => (
+                                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                ))}
                               </select>
                             </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Quantity</label>
-                            <input
-                              type="number"
-                              required
-                              min="1"
-                              value={item.quantity || ''}
-                              onChange={(e) => updateItemRow(index, 'quantity', parseInt(e.target.value) || 0)}
-                              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                            />
-                          </div>
-                          {modalType === 'OUT' && (
-                            <div className="flex items-end pb-2">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={item.fromScheduled}
-                                  onChange={(e) => updateItemRow(index, 'fromScheduled', e.target.checked)}
-                                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                                />
-                                <span className="text-xs font-medium text-slate-600">From Scheduled Stock</span>
-                              </label>
+                            <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Select Item</label>
+                              <div className="relative">
+                                <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <select
+                                  required
+                                  disabled={!!editingTransaction}
+                                  value={item.itemId}
+                                  onChange={(e) => updateItemRow(index, 'itemId', e.target.value)}
+                                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-xs font-bold disabled:opacity-50 appearance-none"
+                                >
+                                  <option value="">Choose item...</option>
+                                  {items
+                                    .filter(i => item.categoryId === 'ALL' || i.categoryId === item.categoryId)
+                                    .map(i => (
+                                      <option key={i.id} value={i.id}>
+                                        {i.name} ({i.currentStock} {i.unit})
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
                             </div>
-                          )}
+                          </div>
+                          
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Quantity</label>
+                              <input
+                                type="number"
+                                required
+                                min="1"
+                                value={item.quantity || ''}
+                                onChange={(e) => updateItemRow(index, 'quantity', parseInt(e.target.value) || 0)}
+                                className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                              />
+                            </div>
+                            {modalType === 'OUT' && (
+                              <div className="pt-5">
+                                <label className="flex items-center gap-2 cursor-pointer group">
+                                  <div className={`w-10 h-6 rounded-full transition-all relative ${item.fromScheduled ? 'bg-blue-500' : 'bg-slate-200'}`}>
+                                    <input
+                                      type="checkbox"
+                                      checked={item.fromScheduled}
+                                      onChange={(e) => updateItemRow(index, 'fromScheduled', e.target.checked)}
+                                      className="sr-only"
+                                    />
+                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${item.fromScheduled ? 'left-5' : 'left-1'}`}></div>
+                                  </div>
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-600 transition-colors">Sch</span>
+                                </label>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-row-reverse gap-3 p-6 border-t border-slate-100 bg-slate-50 shrink-0">
+              <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row-reverse gap-3 shrink-0">
                 <button
                   type="submit"
                   disabled={loading}
-                  className={`flex-1 text-white font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
-                    modalType === 'IN' ? 'bg-emerald-600 hover:bg-emerald-700' : 
-                    modalType === 'OUT' ? 'bg-rose-600 hover:bg-rose-700' :
-                    'bg-amber-600 hover:bg-amber-700'
+                  className={`w-full sm:flex-1 text-white font-black uppercase tracking-widest py-4 sm:py-3 rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] shadow-lg ${
+                    modalType === 'IN' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' : 
+                    modalType === 'OUT' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20' :
+                    'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
                   }`}
                 >
                   {loading ? (
                     <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   ) : (
                     <>
-                      <Plus size={18} />
-                      {editingTransaction ? 'Update' : 'Confirm'} {modalType}
+                      {editingTransaction ? <Edit2 size={18} /> : <Plus size={18} />}
+                      <span>{editingTransaction ? 'Update' : 'Confirm'} {modalType}</span>
                     </>
                   )}
                 </button>
-                {editingTransaction && formData.invoiceNo && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeModal();
-                      initiateDelete('PI_DELETE', { invoiceNo: formData.invoiceNo });
-                    }}
-                    className="flex-1 px-4 py-2 bg-rose-50 text-rose-600 border border-rose-200 font-bold rounded-lg hover:bg-rose-100 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Trash2 size={18} />
-                    Delete Entire PI
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 px-6 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
+                  className="w-full sm:w-auto px-8 py-4 sm:py-3 border-2 border-slate-200 text-slate-500 font-black uppercase tracking-widest rounded-2xl hover:bg-slate-100 transition-all active:scale-[0.98]"
                 >
                   Cancel
                 </button>

@@ -29,6 +29,9 @@ export interface Transaction {
   sourceDestination?: string;
   location?: string;
   createdBy: string;
+  creatorEmail: string;
+  creatorRole: string;
+  totalBoxes?: number;
   fromScheduled?: boolean;
 }
 
