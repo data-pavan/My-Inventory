@@ -13,6 +13,7 @@ import {
   writeBatch,
   getDocs
 } from 'firebase/firestore';
+import Select from 'react-select';
 import { db, auth } from '../firebase';
 import { Transaction, Item, Category, TransactionType, OperationType, UserProfile } from '../types';
 import { handleFirestoreError } from '../utils/error-handler';
@@ -329,11 +330,10 @@ export default function Transactions() {
       ['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].includes(cat.name)
     );
     const firstCatId = allowedCategories.length > 0 ? allowedCategories[0].id : '';
-    const firstItemId = firstCatId ? (items.find(i => i.categoryId === firstCatId)?.id || '') : '';
     
     setFactoryInData({
       ...factoryInData,
-      items: [...factoryInData.items, { categoryId: firstCatId, itemId: firstItemId, production: 0, rejected: 0 }]
+      items: [...factoryInData.items, { categoryId: firstCatId, itemId: '', production: 0, rejected: 0 }]
     });
   };
 
@@ -348,8 +348,7 @@ export default function Transactions() {
     const newItems = [...factoryInData.items];
     newItems[index] = { ...newItems[index], [field]: value };
     if (field === 'categoryId') {
-      const firstItem = items.find(i => i.categoryId === value);
-      newItems[index].itemId = firstItem ? firstItem.id : '';
+      newItems[index].itemId = '';
     }
     setFactoryInData({ ...factoryInData, items: newItems });
   };
@@ -359,12 +358,11 @@ export default function Transactions() {
       ['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].includes(cat.name)
     );
     const firstCatId = allowedCategories.length > 0 ? allowedCategories[0].id : '';
-    const firstItemId = firstCatId ? (items.find(i => i.categoryId === firstCatId)?.id || '') : '';
     
     setFactoryInData({
       shift: 'Day Shift',
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-      items: [{ categoryId: firstCatId, itemId: firstItemId, production: 0, rejected: 0 }]
+      items: [{ categoryId: firstCatId, itemId: '', production: 0, rejected: 0 }]
     });
     setIsFactoryInModalOpen(true);
   };
@@ -380,6 +378,7 @@ export default function Transactions() {
         sourceDestination: tx.sourceDestination || '',
         location: tx.location || '',
         salesPerson: tx.salesPerson || '',
+        totalBoxes: tx.totalBoxes || 0,
         date: (type === 'OUT' && tx.type === 'SCHEDULED') 
           ? format(new Date(), "yyyy-MM-dd'T'HH:mm") 
           : format(new Date(tx.date), "yyyy-MM-dd'T'HH:mm"),
@@ -388,7 +387,9 @@ export default function Transactions() {
           itemId: tx.itemId, 
           quantity: tx.quantity, 
           fromScheduled: type === 'OUT' && tx.type === 'SCHEDULED' ? true : (tx.fromScheduled || false),
-          originalTxId: tx.id
+          originalTxId: tx.id,
+          production: tx.production || 0,
+          rejected: tx.rejected || 0
         }]
       });
     } else {
@@ -398,8 +399,9 @@ export default function Transactions() {
         sourceDestination: '',
         location: '',
         salesPerson: '',
+        totalBoxes: 0,
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
+        items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
       });
     }
     setIsModalOpen(true);
@@ -417,6 +419,7 @@ export default function Transactions() {
       sourceDestination: firstTx.sourceDestination || '',
       location: firstTx.location || '',
       salesPerson: firstTx.salesPerson || '',
+      totalBoxes: firstTx.totalBoxes || 0,
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
       items: relatedTxs.map(t => {
         const item = items.find(i => i.id === t.itemId);
@@ -425,7 +428,9 @@ export default function Transactions() {
           itemId: t.itemId,
           quantity: t.quantity,
           fromScheduled: true,
-          originalTxId: t.id
+          originalTxId: t.id,
+          production: 0,
+          rejected: 0
         };
       })
     });
@@ -435,7 +440,7 @@ export default function Transactions() {
   const addItemRow = () => {
     setFormData(prev => ({
       ...prev,
-      items: [...prev.items, { categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
+      items: [...prev.items, { categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
     }));
   };
 
@@ -1461,30 +1466,54 @@ export default function Transactions() {
 
                         <div className="lg:col-span-3 space-y-1.5">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Item</label>
-                          <input
-                            list={`items-list-${index}`}
-                            value={items.find(i => i.id === item.itemId)?.name || ''}
-                            onChange={(e) => {
-                              const selectedItem = items.find(i => i.name === e.target.value && i.categoryId === item.categoryId);
-                              if (selectedItem) {
-                                updateFactoryInItem(index, 'itemId', selectedItem.id);
-                              } else if (e.target.value === '') {
-                                updateFactoryInItem(index, 'itemId', '');
-                              }
-                            }}
-                            placeholder="Select Item"
-                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
-                            required
-                            disabled={!item.categoryId}
-                          />
-                          <datalist id={`items-list-${index}`}>
-                            {items
+                          <Select
+                            isDisabled={!item.categoryId}
+                            value={items
                               .filter(i => i.categoryId === item.categoryId)
-                              .map(i => (
-                                <option key={i.id} value={i.name} />
-                              ))
+                              .find(i => i.id === item.itemId) 
+                              ? { 
+                                  value: item.itemId, 
+                                  label: items.find(i => i.id === item.itemId)?.name 
+                                } 
+                              : null
                             }
-                          </datalist>
+                            onChange={(option) => updateFactoryInItem(index, 'itemId', option ? option.value : '')}
+                            options={items
+                              .filter(i => i.categoryId === item.categoryId)
+                              .map(i => ({ value: i.id, label: i.name }))
+                            }
+                            placeholder="Select Item"
+                            className="react-select-container"
+                            classNamePrefix="react-select"
+                            styles={{
+                              control: (base) => ({
+                                ...base,
+                                backgroundColor: '#f8fafc',
+                                border: '2px solid #f1f5f9',
+                                borderRadius: '1rem',
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.875rem',
+                                fontWeight: '700',
+                                boxShadow: 'none',
+                                '&:hover': {
+                                  borderColor: '#f1f5f9'
+                                }
+                              }),
+                              menu: (base) => ({
+                                ...base,
+                                borderRadius: '1rem',
+                                overflow: 'hidden',
+                                zIndex: 50
+                              }),
+                              option: (base, state) => ({
+                                ...base,
+                                backgroundColor: state.isSelected ? '#4f46e5' : state.isFocused ? '#f1f5f9' : 'white',
+                                color: state.isSelected ? 'white' : '#1e293b',
+                                fontWeight: '700',
+                                fontSize: '0.875rem'
+                              })
+                            }}
+                          />
                         </div>
 
                         <div className="lg:col-span-2 space-y-1.5">
@@ -1726,23 +1755,54 @@ export default function Transactions() {
                             <div>
                               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Select Item</label>
                               <div className="relative">
-                                <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                <select
-                                  required
-                                  disabled={!!editingTransaction}
-                                  value={item.itemId}
-                                  onChange={(e) => updateItemRow(index, 'itemId', e.target.value)}
-                                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-xs font-bold disabled:opacity-50 appearance-none"
-                                >
-                                  <option value="">Choose item...</option>
-                                  {items
+                                <Select
+                                  isDisabled={!!editingTransaction}
+                                  value={items
                                     .filter(i => item.categoryId === 'ALL' || i.categoryId === item.categoryId)
-                                    .map(i => (
-                                      <option key={i.id} value={i.id}>
-                                        {i.name} ({i.currentStock} {i.unit})
-                                      </option>
-                                    ))}
-                                </select>
+                                    .find(i => i.id === item.itemId) 
+                                    ? { 
+                                        value: item.itemId, 
+                                        label: items.find(i => i.id === item.itemId)?.name 
+                                      } 
+                                    : null
+                                  }
+                                  onChange={(option) => updateItemRow(index, 'itemId', option ? option.value : '')}
+                                  options={items
+                                    .filter(i => item.categoryId === 'ALL' || i.categoryId === item.categoryId)
+                                    .map(i => ({ value: i.id, label: `${i.name} (${i.currentStock} ${i.unit})` }))
+                                  }
+                                  placeholder="Choose item..."
+                                  className="react-select-container"
+                                  classNamePrefix="react-select"
+                                  styles={{
+                                    control: (base) => ({
+                                      ...base,
+                                      backgroundColor: '#f8fafc',
+                                      border: '1px solid #f1f5f9',
+                                      borderRadius: '0.75rem',
+                                      padding: '0.125rem 0.25rem',
+                                      fontSize: '0.75rem',
+                                      fontWeight: '700',
+                                      boxShadow: 'none',
+                                      '&:hover': {
+                                        borderColor: '#f1f5f9'
+                                      }
+                                    }),
+                                    menu: (base) => ({
+                                      ...base,
+                                      borderRadius: '0.75rem',
+                                      overflow: 'hidden',
+                                      zIndex: 50
+                                    }),
+                                    option: (base, state) => ({
+                                      ...base,
+                                      backgroundColor: state.isSelected ? '#3b82f6' : state.isFocused ? '#f1f5f9' : 'white',
+                                      color: state.isSelected ? 'white' : '#1e293b',
+                                      fontWeight: '700',
+                                      fontSize: '0.75rem'
+                                    })
+                                  }}
+                                />
                               </div>
                             </div>
                           </div>
