@@ -262,7 +262,16 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316', '#14B8A6'];
 
   const exportToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(items.map(item => ({
+    const sortedItems = [...items].sort((a, b) => {
+      const catA = categories.find(c => c.id === a.categoryId)?.name || '';
+      const catB = categories.find(c => c.id === b.categoryId)?.name || '';
+      if (catA === catB) {
+        return a.name.localeCompare(b.name);
+      }
+      return catA.localeCompare(catB);
+    });
+
+    const ws = XLSX.utils.json_to_sheet(sortedItems.map(item => ({
       'Item Name': item.name,
       'Category': categories.find(c => c.id === item.categoryId)?.name || 'Unknown',
       'Available Stock': item.currentStock,

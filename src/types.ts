@@ -35,6 +35,7 @@ export interface Transaction {
   fromScheduled?: boolean;
   production?: number;
   rejected?: number;
+  shift?: string;
 }
 
 export interface UserProfile {

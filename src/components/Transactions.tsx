@@ -83,11 +83,9 @@ export default function Transactions() {
   });
 
   const [factoryInData, setFactoryInData] = useState({
-    categoryId: '',
-    itemId: '',
-    production: 0,
-    rejected: 0,
-    date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
+    shift: 'Day Shift',
+    date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    items: [{ categoryId: '', itemId: '', production: 0, rejected: 0 }]
   });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -275,51 +273,78 @@ export default function Transactions() {
 
   const handleFactoryInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!factoryInData.itemId) return toast.error('Please select an item');
+    if (factoryInData.items.some(item => !item.itemId)) {
+      return toast.error('Please select an item for all rows');
+    }
     
-    const totalGood = Math.max(0, factoryInData.production - factoryInData.rejected);
     setLoading(true);
     try {
       await runTransaction(db, async (transaction) => {
-        const itemRef = doc(db, 'items', factoryInData.itemId);
-        const itemSnap = await transaction.get(itemRef);
-        if (!itemSnap.exists()) throw new Error('Item not found');
-        
-        const itemData = itemSnap.data() as Item;
-        const newStock = (itemData.currentStock || 0) + totalGood;
-        
-        const voucherNo = generateVoucherNo('FACTORY_IN');
-        const txData = {
-          itemId: factoryInData.itemId,
-          quantity: totalGood,
-          production: factoryInData.production,
-          rejected: factoryInData.rejected,
-          voucherNo,
-          type: 'FACTORY_IN',
-          createdBy: auth.currentUser?.uid,
-          creatorEmail: profile?.email || auth.currentUser?.email || 'Unknown',
-          creatorRole: profile?.role || 'staff',
-          date: new Date(factoryInData.date).toISOString(),
-        };
+        for (const item of factoryInData.items) {
+          const totalGood = Math.max(0, item.production - item.rejected);
+          const itemRef = doc(db, 'items', item.itemId);
+          const itemSnap = await transaction.get(itemRef);
+          
+          if (!itemSnap.exists()) throw new Error(`Item ${item.itemId} not found`);
+          
+          const itemData = itemSnap.data() as Item;
+          const newStock = (itemData.currentStock || 0) + totalGood;
+          
+          const voucherNo = generateVoucherNo('FACTORY_IN');
+          const txData = {
+            itemId: item.itemId,
+            quantity: totalGood,
+            production: item.production,
+            rejected: item.rejected,
+            shift: factoryInData.shift,
+            voucherNo,
+            type: 'FACTORY_IN',
+            createdBy: auth.currentUser?.uid,
+            creatorEmail: profile?.email || auth.currentUser?.email || 'Unknown',
+            creatorRole: profile?.role || 'staff',
+            date: new Date(factoryInData.date).toISOString(),
+          };
 
-        transaction.set(doc(collection(db, 'transactions')), txData);
-        transaction.update(itemRef, { currentStock: newStock });
+          transaction.set(doc(collection(db, 'transactions')), txData);
+          transaction.update(itemRef, { currentStock: newStock });
+        }
       });
 
       toast.success('Factory production recorded successfully');
       setIsFactoryInModalOpen(false);
       setFactoryInData({
-        categoryId: '',
-        itemId: '',
-        production: 0,
-        rejected: 0,
-        date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
+        shift: 'Day Shift',
+        date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+        items: [{ categoryId: '', itemId: '', production: 0, rejected: 0 }]
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'transactions/factory-in');
     } finally {
       setLoading(false);
     }
+  };
+
+  const addFactoryInItem = () => {
+    setFactoryInData({
+      ...factoryInData,
+      items: [...factoryInData.items, { categoryId: '', itemId: '', production: 0, rejected: 0 }]
+    });
+  };
+
+  const removeFactoryInItem = (index: number) => {
+    if (factoryInData.items.length <= 1) return;
+    const newItems = [...factoryInData.items];
+    newItems.splice(index, 1);
+    setFactoryInData({ ...factoryInData, items: newItems });
+  };
+
+  const updateFactoryInItem = (index: number, field: string, value: any) => {
+    const newItems = [...factoryInData.items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    if (field === 'categoryId') {
+      newItems[index].itemId = '';
+    }
+    setFactoryInData({ ...factoryInData, items: newItems });
   };
 
   const openModal = (type: TransactionType, tx?: Transaction) => {
@@ -647,7 +672,18 @@ export default function Transactions() {
   };
 
   const exportToExcel = () => {
-    const data = filteredTransactions.map(tx => {
+    const sortedTransactions = [...filteredTransactions].sort((a, b) => {
+      const itemA = items.find(i => i.id === a.itemId);
+      const itemB = items.find(i => i.id === b.itemId);
+      const catA = categories.find(c => c.id === itemA?.categoryId)?.name || '';
+      const catB = categories.find(c => c.id === itemB?.categoryId)?.name || '';
+      if (catA === catB) {
+        return (itemA?.name || '').localeCompare(itemB?.name || '');
+      }
+      return catA.localeCompare(catB);
+    });
+
+    const data = sortedTransactions.map(tx => {
       const item = items.find(i => i.id === tx.itemId);
       const category = categories.find(c => c.id === item?.categoryId);
       
@@ -1297,16 +1333,16 @@ export default function Transactions() {
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100"
+            className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col"
           >
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/30">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/30 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
                   <Plus size={24} />
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Factory Production</h2>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Record new production entry</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Record shift-wise production</p>
                 </div>
               </div>
               <button 
@@ -1317,129 +1353,158 @@ export default function Transactions() {
               </button>
             </div>
 
-            <form onSubmit={handleFactoryInSubmit} className="p-6 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <form onSubmit={handleFactoryInSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Shift and Date Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-slate-50 p-5 rounded-3xl border border-slate-100">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Category</label>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].map(catName => {
-                      const cat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
-                      if (!cat) return null;
-                      return (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => setFactoryInData({ ...factoryInData, categoryId: cat.id, itemId: '' })}
-                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border-2 ${
-                            factoryInData.categoryId === cat.id 
-                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20' 
-                              : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200'
-                          }`}
-                        >
-                          {catName}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <select
-                    value={factoryInData.categoryId}
-                    onChange={(e) => setFactoryInData({ ...factoryInData, categoryId: e.target.value, itemId: '' })}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
-                    required
-                  >
-                    <option value="">Or Select Another Category</option>
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Shift</label>
+                  <div className="flex gap-2">
+                    {['Day Shift', 'Night Shift'].map(shift => (
+                      <button
+                        key={shift}
+                        type="button"
+                        onClick={() => setFactoryInData({ ...factoryInData, shift })}
+                        className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${
+                          factoryInData.shift === shift 
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20' 
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200'
+                        }`}
+                      >
+                        {shift}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Item</label>
-                  <select
-                    value={factoryInData.itemId}
-                    onChange={(e) => setFactoryInData({ ...factoryInData, itemId: e.target.value })}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={factoryInData.date}
+                    onChange={(e) => setFactoryInData({ ...factoryInData, date: e.target.value })}
+                    className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
                     required
-                    disabled={!factoryInData.categoryId}
+                  />
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Production Items</h3>
+                  <button
+                    type="button"
+                    onClick={addFactoryInItem}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
                   >
-                    <option value="">Select Item</option>
-                    {items
-                      .filter(item => item.categoryId === factoryInData.categoryId)
-                      .map(item => (
-                        <option key={item.id} value={item.id}>{item.name}</option>
-                      ))
-                    }
-                  </select>
+                    <Plus size={14} />
+                    Add Item
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {factoryInData.items.map((item, index) => (
+                    <div 
+                      key={index}
+                      className="group bg-white border-2 border-slate-100 rounded-3xl p-5 hover:border-indigo-100 transition-all relative"
+                    >
+                      {factoryInData.items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeFactoryInItem(index)}
+                          className="absolute -top-2 -right-2 w-8 h-8 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all shadow-sm border border-rose-100 opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                        <div className="lg:col-span-3 space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Category</label>
+                          <select
+                            value={item.categoryId}
+                            onChange={(e) => updateFactoryInItem(index, 'categoryId', e.target.value)}
+                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                            required
+                          >
+                            <option value="">Category</option>
+                            {categories.map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="lg:col-span-3 space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Item</label>
+                          <select
+                            value={item.itemId}
+                            onChange={(e) => updateFactoryInItem(index, 'itemId', e.target.value)}
+                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                            required
+                            disabled={!item.categoryId}
+                          >
+                            <option value="">Select Item</option>
+                            {items
+                              .filter(i => i.categoryId === item.categoryId)
+                              .map(i => (
+                                <option key={i.id} value={i.id}>{i.name}</option>
+                              ))
+                            }
+                          </select>
+                        </div>
+
+                        <div className="lg:col-span-2 space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production</label>
+                          <input
+                            type="number"
+                            value={item.production || ''}
+                            onChange={(e) => updateFactoryInItem(index, 'production', Number(e.target.value))}
+                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                            placeholder="0"
+                            min="0"
+                            required
+                          />
+                        </div>
+
+                        <div className="lg:col-span-2 space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rejected</label>
+                          <input
+                            type="number"
+                            value={item.rejected || ''}
+                            onChange={(e) => updateFactoryInItem(index, 'rejected', Number(e.target.value))}
+                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                            placeholder="0"
+                            min="0"
+                            required
+                          />
+                        </div>
+
+                        <div className="lg:col-span-2 flex flex-col justify-end pb-1">
+                          <div className="bg-indigo-50 px-4 py-2.5 rounded-2xl border border-indigo-100">
+                            <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">Good Parts</p>
+                            <p className="text-lg font-black text-indigo-600 leading-none">
+                              {Math.max(0, item.production - item.rejected)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-5">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production Qty</label>
-                  <input
-                    type="number"
-                    value={factoryInData.production || ''}
-                    onChange={(e) => setFactoryInData({ ...factoryInData, production: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
-                    placeholder="0"
-                    min="0"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rejected Qty</label>
-                  <input
-                    type="number"
-                    value={factoryInData.rejected || ''}
-                    onChange={(e) => setFactoryInData({ ...factoryInData, rejected: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
-                    placeholder="0"
-                    min="0"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Total Good Parts</p>
-                  <p className="text-2xl font-black text-indigo-600">
-                    {Math.max(0, factoryInData.production - factoryInData.rejected)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Current Stock Update</p>
-                  <p className="text-sm font-bold text-indigo-500">
-                    + {Math.max(0, factoryInData.production - factoryInData.rejected)} Units
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production Date & Time</label>
-                <input
-                  type="datetime-local"
-                  value={factoryInData.date}
-                  onChange={(e) => setFactoryInData({ ...factoryInData, date: e.target.value })}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
+              <div className="shrink-0 flex gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsFactoryInModalOpen(false)}
-                  className="flex-1 px-6 py-3.5 rounded-2xl text-sm font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all uppercase tracking-widest"
+                  className="flex-1 px-6 py-4 rounded-2xl text-sm font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all uppercase tracking-widest"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-[2] px-6 py-3.5 rounded-2xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest flex items-center justify-center gap-2"
+                  className="flex-[2] px-6 py-4 rounded-2xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

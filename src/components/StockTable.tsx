@@ -59,6 +59,13 @@ export default function StockTable() {
     const isLow = item.currentStock <= item.minStock;
     const matchesStatus = filterStatus === 'ALL' || (filterStatus === 'LOW' ? isLow : !isLow);
     return matchesSearch && matchesCategory && matchesStatus;
+  }).sort((a, b) => {
+    const catA = categories.find(c => c.id === a.categoryId)?.name || '';
+    const catB = categories.find(c => c.id === b.categoryId)?.name || '';
+    if (catA === catB) {
+      return a.name.localeCompare(b.name);
+    }
+    return catA.localeCompare(catB);
   });
 
   const globalStats = {
@@ -89,9 +96,17 @@ export default function StockTable() {
   };
 
   const exportToExcel = async () => {
-    const itemsToExport = selectedItemIds.length > 0 
+    const itemsToExport = (selectedItemIds.length > 0 
       ? items.filter(i => selectedItemIds.includes(i.id))
-      : filteredItems;
+      : filteredItems)
+      .sort((a, b) => {
+        const catA = categories.find(c => c.id === a.categoryId)?.name || '';
+        const catB = categories.find(c => c.id === b.categoryId)?.name || '';
+        if (catA === catB) {
+          return a.name.localeCompare(b.name);
+        }
+        return catA.localeCompare(catB);
+      });
 
     if (itemsToExport.length === 0) {
       toast.error('No items to export');
