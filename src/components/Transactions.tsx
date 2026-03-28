@@ -325,9 +325,15 @@ export default function Transactions() {
   };
 
   const addFactoryInItem = () => {
+    const allowedCategories = categories.filter(cat => 
+      ['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].includes(cat.name)
+    );
+    const firstCatId = allowedCategories.length > 0 ? allowedCategories[0].id : '';
+    const firstItemId = firstCatId ? (items.find(i => i.categoryId === firstCatId)?.id || '') : '';
+    
     setFactoryInData({
       ...factoryInData,
-      items: [...factoryInData.items, { categoryId: '', itemId: '', production: 0, rejected: 0 }]
+      items: [...factoryInData.items, { categoryId: firstCatId, itemId: firstItemId, production: 0, rejected: 0 }]
     });
   };
 
@@ -342,9 +348,25 @@ export default function Transactions() {
     const newItems = [...factoryInData.items];
     newItems[index] = { ...newItems[index], [field]: value };
     if (field === 'categoryId') {
-      newItems[index].itemId = '';
+      const firstItem = items.find(i => i.categoryId === value);
+      newItems[index].itemId = firstItem ? firstItem.id : '';
     }
     setFactoryInData({ ...factoryInData, items: newItems });
+  };
+
+  const openFactoryInModal = () => {
+    const allowedCategories = categories.filter(cat => 
+      ['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].includes(cat.name)
+    );
+    const firstCatId = allowedCategories.length > 0 ? allowedCategories[0].id : '';
+    const firstItemId = firstCatId ? (items.find(i => i.categoryId === firstCatId)?.id || '') : '';
+    
+    setFactoryInData({
+      shift: 'Day Shift',
+      date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+      items: [{ categoryId: firstCatId, itemId: firstItemId, production: 0, rejected: 0 }]
+    });
+    setIsFactoryInModalOpen(true);
   };
 
   const openModal = (type: TransactionType, tx?: Transaction) => {
@@ -763,7 +785,7 @@ export default function Transactions() {
           </button>
           <button 
             type="button"
-            onClick={() => setIsFactoryInModalOpen(true)}
+            onClick={openFactoryInModal}
             className="flex flex-col items-center justify-center gap-1.5 bg-indigo-600 text-white p-3 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
           >
             <Plus size={20} />
@@ -1428,37 +1450,49 @@ export default function Transactions() {
                             required
                           >
                             <option value="">Category</option>
-                            {categories.map(cat => (
-                              <option key={cat.id} value={cat.id}>{cat.name}</option>
-                            ))}
+                            {categories
+                              .filter(cat => ['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].includes(cat.name))
+                              .map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                              ))
+                            }
                           </select>
                         </div>
 
                         <div className="lg:col-span-3 space-y-1.5">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Item</label>
-                          <select
-                            value={item.itemId}
-                            onChange={(e) => updateFactoryInItem(index, 'itemId', e.target.value)}
+                          <input
+                            list={`items-list-${index}`}
+                            value={items.find(i => i.id === item.itemId)?.name || ''}
+                            onChange={(e) => {
+                              const selectedItem = items.find(i => i.name === e.target.value && i.categoryId === item.categoryId);
+                              if (selectedItem) {
+                                updateFactoryInItem(index, 'itemId', selectedItem.id);
+                              } else if (e.target.value === '') {
+                                updateFactoryInItem(index, 'itemId', '');
+                              }
+                            }}
+                            placeholder="Select Item"
                             className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
                             required
                             disabled={!item.categoryId}
-                          >
-                            <option value="">Select Item</option>
+                          />
+                          <datalist id={`items-list-${index}`}>
                             {items
                               .filter(i => i.categoryId === item.categoryId)
                               .map(i => (
-                                <option key={i.id} value={i.id}>{i.name}</option>
+                                <option key={i.id} value={i.name} />
                               ))
                             }
-                          </select>
+                          </datalist>
                         </div>
 
                         <div className="lg:col-span-2 space-y-1.5">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production</label>
                           <input
                             type="number"
-                            value={item.production || ''}
-                            onChange={(e) => updateFactoryInItem(index, 'production', Number(e.target.value))}
+                            value={item.production}
+                            onChange={(e) => updateFactoryInItem(index, 'production', e.target.value === '' ? 0 : Number(e.target.value))}
                             className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
                             placeholder="0"
                             min="0"
@@ -1470,8 +1504,8 @@ export default function Transactions() {
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rejected</label>
                           <input
                             type="number"
-                            value={item.rejected || ''}
-                            onChange={(e) => updateFactoryInItem(index, 'rejected', Number(e.target.value))}
+                            value={item.rejected}
+                            onChange={(e) => updateFactoryInItem(index, 'rejected', e.target.value === '' ? 0 : Number(e.target.value))}
                             className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
                             placeholder="0"
                             min="0"
@@ -1602,8 +1636,8 @@ export default function Transactions() {
                         <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                           type="number"
-                          value={formData.totalBoxes || ''}
-                          onChange={(e) => setFormData({ ...formData, totalBoxes: parseInt(e.target.value) || 0 })}
+                          value={formData.totalBoxes}
+                          onChange={(e) => setFormData({ ...formData, totalBoxes: e.target.value === '' ? 0 : Number(e.target.value) })}
                           className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
                           placeholder="0"
                         />
@@ -1720,8 +1754,8 @@ export default function Transactions() {
                                 type="number"
                                 required
                                 min="1"
-                                value={item.quantity || ''}
-                                onChange={(e) => updateItemRow(index, 'quantity', parseInt(e.target.value) || 0)}
+                                value={item.quantity}
+                                onChange={(e) => updateItemRow(index, 'quantity', e.target.value === '' ? 0 : Number(e.target.value))}
                                 className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
                               />
                             </div>
