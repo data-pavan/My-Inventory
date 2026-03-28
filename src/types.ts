@@ -1,4 +1,4 @@
-export type TransactionType = 'IN' | 'OUT' | 'SCHEDULED';
+export type TransactionType = 'IN' | 'OUT' | 'SCHEDULED' | 'FACTORY_IN';
 
 export interface Category {
   id: string;
@@ -33,6 +33,8 @@ export interface Transaction {
   creatorRole: string;
   totalBoxes?: number;
   fromScheduled?: boolean;
+  production?: number;
+  rejected?: number;
 }
 
 export interface UserProfile {

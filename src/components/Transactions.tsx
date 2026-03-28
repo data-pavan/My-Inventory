@@ -39,6 +39,7 @@ import {
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../App';
+import { motion } from 'motion/react';
 
 export default function Transactions() {
   const { profile } = useAuth();
@@ -78,13 +79,22 @@ export default function Transactions() {
     salesPerson: '',
     totalBoxes: 0,
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '' }]
+    items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
+  });
+
+  const [factoryInData, setFactoryInData] = useState({
+    categoryId: '',
+    itemId: '',
+    production: 0,
+    rejected: 0,
+    date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
   });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [isBatchDispatchModalOpen, setIsBatchDispatchModalOpen] = useState(false);
+  const [isFactoryInModalOpen, setIsFactoryInModalOpen] = useState(false);
   const [batchDispatchDate, setBatchDispatchDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [batchFormData, setBatchFormData] = useState({
     invoiceNo: '',
@@ -121,8 +131,9 @@ export default function Transactions() {
     };
   }, [profile]);
 
-  const generateVoucherNo = () => {
-    const prefix = modalType === 'IN' ? 'VIN' : modalType === 'OUT' ? 'VOUT' : 'VSCH';
+  const generateVoucherNo = (type?: TransactionType) => {
+    const t = type || modalType;
+    const prefix = t === 'IN' ? 'VIN' : t === 'OUT' ? 'VOUT' : t === 'SCHEDULED' ? 'VSCH' : 'VFIN';
     const lastNum = transactions.length + 1;
     return `${prefix}-${String(lastNum).padStart(4, '0')}`;
   };
@@ -257,6 +268,55 @@ export default function Transactions() {
       closeModal();
     } catch (error) {
       handleFirestoreError(error, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFactoryInSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!factoryInData.itemId) return toast.error('Please select an item');
+    
+    const totalGood = Math.max(0, factoryInData.production - factoryInData.rejected);
+    setLoading(true);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const itemRef = doc(db, 'items', factoryInData.itemId);
+        const itemSnap = await transaction.get(itemRef);
+        if (!itemSnap.exists()) throw new Error('Item not found');
+        
+        const itemData = itemSnap.data() as Item;
+        const newStock = (itemData.currentStock || 0) + totalGood;
+        
+        const voucherNo = generateVoucherNo('FACTORY_IN');
+        const txData = {
+          itemId: factoryInData.itemId,
+          quantity: totalGood,
+          production: factoryInData.production,
+          rejected: factoryInData.rejected,
+          voucherNo,
+          type: 'FACTORY_IN',
+          createdBy: auth.currentUser?.uid,
+          creatorEmail: profile?.email || auth.currentUser?.email || 'Unknown',
+          creatorRole: profile?.role || 'staff',
+          date: new Date(factoryInData.date).toISOString(),
+        };
+
+        transaction.set(doc(collection(db, 'transactions')), txData);
+        transaction.update(itemRef, { currentStock: newStock });
+      });
+
+      toast.success('Factory production recorded successfully');
+      setIsFactoryInModalOpen(false);
+      setFactoryInData({
+        categoryId: '',
+        itemId: '',
+        production: 0,
+        rejected: 0,
+        date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'transactions/factory-in');
     } finally {
       setLoading(false);
     }
@@ -640,8 +700,9 @@ export default function Transactions() {
         </div>
 
         {/* Action Buttons - Mobile Optimized */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 relative z-10">
           <button 
+            type="button"
             onClick={() => openModal('IN')}
             className="flex flex-col items-center justify-center gap-1.5 bg-emerald-600 text-white p-3 rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 active:scale-95"
           >
@@ -649,6 +710,7 @@ export default function Transactions() {
             <span className="text-[10px] font-bold uppercase tracking-wider">Stock IN</span>
           </button>
           <button 
+            type="button"
             onClick={() => openModal('OUT')}
             className="flex flex-col items-center justify-center gap-1.5 bg-rose-600 text-white p-3 rounded-2xl hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20 active:scale-95"
           >
@@ -656,11 +718,20 @@ export default function Transactions() {
             <span className="text-[10px] font-bold uppercase tracking-wider">Stock OUT</span>
           </button>
           <button 
+            type="button"
             onClick={() => openModal('SCHEDULED')}
             className="flex flex-col items-center justify-center gap-1.5 bg-amber-600 text-white p-3 rounded-2xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-600/20 active:scale-95"
           >
             <Clock size={20} />
             <span className="text-[10px] font-bold uppercase tracking-wider">Scheduled</span>
+          </button>
+          <button 
+            type="button"
+            onClick={() => setIsFactoryInModalOpen(true)}
+            className="flex flex-col items-center justify-center gap-1.5 bg-indigo-600 text-white p-3 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
+          >
+            <Plus size={20} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Factory In</span>
           </button>
         </div>
       </div>
@@ -826,58 +897,82 @@ export default function Transactions() {
               >
                 {/* Card Header - Click to Expand */}
                 <div 
-                  className="p-4 cursor-pointer active:bg-slate-50 transition-colors"
+                  className="cursor-pointer active:bg-slate-50 transition-colors flex flex-col"
                   onClick={() => toggleVoucher(voucherNo)}
                 >
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        firstTx.type === 'IN' ? 'bg-emerald-50 text-emerald-600' : 
-                        firstTx.type === 'OUT' ? 'bg-rose-50 text-rose-600' : 
-                        'bg-amber-50 text-amber-600'
-                      }`}>
-                        {firstTx.type === 'IN' ? <ArrowDownCircle size={22} /> : 
-                         firstTx.type === 'OUT' ? <ArrowUpCircle size={22} /> : 
-                         <Clock size={22} />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-black text-slate-900 text-sm uppercase tracking-tight">
-                            {firstTx.type} Entry
-                          </h3>
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{voucherNo}</span>
+                  <div className="flex min-h-[100px]">
+                    {/* Left Side - 30% Details Area */}
+                    <div className="w-[30%] bg-slate-50/80 p-3 border-r border-slate-100 flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PI / Invoice</p>
+                          <p className="text-[10px] font-black text-slate-900 truncate">{firstTx.invoiceNo || 'N/A'}</p>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] font-bold text-slate-500">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</span>
-                          <span className="w-1 h-1 rounded-full bg-slate-200"></span>
-                          <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{group.length} {group.length === 1 ? 'Item' : 'Items'}</span>
+                        <div>
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                          <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.salesPerson || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Destination</p>
+                          <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.sourceDestination || 'N/A'}</p>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <div className="text-slate-400">
-                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                      </div>
-                      {firstTx.invoiceNo && (
-                        <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                          {firstTx.invoiceNo}
-                        </span>
+                      
+                      {group.some(t => t.type === 'SCHEDULED') && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPIDispatchModal(voucherNo);
+                          }}
+                          className="mt-2 bg-emerald-600 text-white py-1 px-2 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-sm shadow-emerald-600/20 active:scale-95 transition-all"
+                        >
+                          Dispatch PI
+                        </button>
                       )}
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-50">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500 border border-slate-200 shrink-0">
-                        {firstTx.salesPerson?.[0].toUpperCase() || 'S'}
+                    {/* Right Side - 70% Main Info */}
+                    <div className="w-[70%] p-3 flex flex-col justify-between">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                            firstTx.type === 'IN' ? 'bg-emerald-100 text-emerald-600' : 
+                            firstTx.type === 'OUT' ? 'bg-rose-100 text-rose-600' : 
+                            firstTx.type === 'FACTORY_IN' ? 'bg-indigo-100 text-indigo-600' :
+                            'bg-amber-100 text-amber-600'
+                          }`}>
+                            {firstTx.type === 'IN' ? <ArrowDownCircle size={18} /> : 
+                             firstTx.type === 'OUT' ? <ArrowUpCircle size={18} /> : 
+                             firstTx.type === 'FACTORY_IN' ? <Plus size={18} /> :
+                             <Clock size={18} />}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-black text-slate-900 text-[11px] uppercase tracking-tight truncate">
+                              {firstTx.type.replace('_', ' ')} Entry
+                            </h3>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{voucherNo}</p>
+                          </div>
+                        </div>
+                        <div className="text-slate-400 shrink-0">
+                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </div>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-500 truncate">{firstTx.salesPerson || 'No Sales Person'}</span>
-                    </div>
-                    <div className="flex items-center gap-1 justify-end min-w-0">
-                      <MapPin size={10} className="text-slate-400 shrink-0" />
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate text-right">
-                        {firstTx.sourceDestination || firstTx.location || 'No Location'}
-                      </span>
+
+                      <div className="mt-2 flex items-end justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1">
+                            <MapPin size={10} className="text-slate-400 shrink-0" />
+                            <p className="text-[10px] font-bold text-slate-500 truncate max-w-[120px]">
+                              {firstTx.sourceDestination || firstTx.location || 'No Location'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold text-slate-400">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</span>
+                            <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                            <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">{group.length} {group.length === 1 ? 'Item' : 'Items'}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1006,165 +1101,360 @@ export default function Transactions() {
         )}
       </div>
 
-      {/* Desktop View - Table */}
-      <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
-                <th className="px-4 py-3 font-semibold">
-                  <input 
-                    type="checkbox" 
-                    checked={filteredTransactions.length > 0 && selectedTxIds.length === filteredTransactions.length}
-                    onChange={toggleSelectAll}
-                    className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                </th>
-                <th className="px-4 py-3 font-semibold">Voucher No</th>
-                <th className="px-4 py-3 font-semibold">Invoice/PI</th>
-                <th className="px-4 py-3 font-semibold hidden xl:table-cell">Date</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Item</th>
-                <th className="px-4 py-3 font-semibold">Qty</th>
-                <th className="px-4 py-3 font-semibold hidden md:table-cell">Boxes</th>
-                <th className="px-4 py-3 font-semibold hidden 2xl:table-cell">Sales Person</th>
-                <th className="px-4 py-3 font-semibold hidden 2xl:table-cell">Created By</th>
-                <th className="px-4 py-3 font-semibold hidden lg:table-cell">Source/Dest</th>
-                <th className="px-4 py-3 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredTransactions.map((tx) => {
-                const item = items.find(i => i.id === tx.itemId);
-                const isSelected = selectedTxIds.includes(tx.id);
-                return (
-                  <tr key={tx.id} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50/50' : ''}`}>
-                    <td className="px-4 py-3">
-                      <input 
-                        type="checkbox" 
-                        checked={isSelected}
-                        onChange={() => toggleSelectTx(tx.id)}
-                        className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="px-4 py-3 font-bold text-slate-900 text-sm">{tx.voucherNo}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600 font-medium">{tx.invoiceNo || '-'}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600 hidden xl:table-cell">
-                      {format(new Date(tx.date), 'MMM dd, yyyy HH:mm')}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        tx.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : 
-                        tx.type === 'OUT' ? 'bg-rose-100 text-rose-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`}>
-                        {tx.type === 'IN' ? <ArrowDownCircle size={10} /> : 
-                         tx.type === 'OUT' ? <ArrowUpCircle size={10} /> :
-                         <Clock size={10} />}
-                        {tx.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-slate-900">{item?.name || 'Unknown'}</span>
-                        <span className="text-[10px] text-slate-500">{categories.find(c => c.id === item?.categoryId)?.name}</span>
+      {/* Desktop View - Grouped Table */}
+      <div className="hidden md:block space-y-4">
+        {groupedTransactions.length === 0 ? (
+          <div className="bg-white p-12 rounded-2xl border-2 border-dashed border-slate-100 text-center">
+            <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="text-slate-300" size={32} />
+            </div>
+            <p className="text-slate-600 font-bold">No results found</p>
+          </div>
+        ) : (
+          groupedTransactions.map((group) => {
+            const firstTx = group[0];
+            const voucherNo = firstTx.voucherNo;
+            const isExpanded = expandedVouchers.includes(voucherNo);
+            const allSelected = group.every(tx => selectedTxIds.includes(tx.id));
+            const someSelected = group.some(tx => selectedTxIds.includes(tx.id));
+
+            return (
+              <div 
+                key={voucherNo}
+                className={`bg-white rounded-2xl border transition-all overflow-hidden ${
+                  allSelected ? 'border-indigo-500 shadow-md' : 
+                  someSelected ? 'border-indigo-200' : 'border-slate-100 shadow-sm'
+                }`}
+              >
+                {/* Group Header */}
+                <div 
+                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                  onClick={() => toggleVoucher(voucherNo)}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      firstTx.type === 'IN' ? 'bg-emerald-50 text-emerald-600' : 
+                      firstTx.type === 'OUT' ? 'bg-rose-50 text-rose-600' : 
+                      firstTx.type === 'FACTORY_IN' ? 'bg-indigo-50 text-indigo-600' :
+                      'bg-amber-50 text-amber-600'
+                    }`}>
+                      {firstTx.type === 'IN' ? <ArrowDownCircle size={22} /> : 
+                       firstTx.type === 'OUT' ? <ArrowUpCircle size={22} /> : 
+                       firstTx.type === 'FACTORY_IN' ? <Plus size={22} /> :
+                       <Clock size={22} />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-slate-900 text-sm uppercase tracking-tight">
+                          {firstTx.type.replace('_', ' ')} Entry
+                        </h3>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{voucherNo}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-1">
-                          <span className="font-bold text-slate-900 text-sm">{tx.quantity}</span>
-                          <span className="text-[10px] text-slate-500">{item?.unit}</span>
-                        </div>
-                        {tx.fromScheduled && (
-                          <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tight">From Scheduled</span>
-                        )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-bold text-slate-500">{format(new Date(firstTx.date), 'MMM d, yyyy HH:mm')}</span>
+                        <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{group.length} {group.length === 1 ? 'Item' : 'Items'}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <span className="text-xs font-bold text-slate-900">{tx.totalBoxes || 0}</span>
-                    </td>
-                    <td className="px-4 py-3 hidden 2xl:table-cell">
-                      <span className="text-xs font-medium text-slate-600">{tx.salesPerson || '-'}</span>
-                    </td>
-                    <td className="px-4 py-3 hidden 2xl:table-cell">
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    {group.some(t => t.type === 'SCHEDULED') && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openPIDispatchModal(voucherNo);
+                        }}
+                        className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-2"
+                      >
+                        <ArrowUpCircle size={14} />
+                        Dispatch PI
+                      </button>
+                    )}
+                    <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-medium text-slate-600 truncate max-w-[100px]" title={tx.creatorEmail || tx.createdBy}>
-                          {tx.creatorEmail?.split('@')[0] || 'Unknown'}
-                        </span>
-                        <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">
-                          {tx.creatorRole || 'staff'}
+                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PI / Invoice</p>
+                        <span className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
+                          {firstTx.invoiceNo || 'N/A'}
                         </span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[120px] hidden lg:table-cell">
-                      {tx.sourceDestination || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {tx.type === 'SCHEDULED' && (
-                          <div className="flex gap-1">
-                            <button 
-                              onClick={() => {
-                                openModal('OUT', tx);
-                              }}
-                              className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-all shadow-sm shadow-emerald-600/20 active:scale-95"
-                              title="Dispatch Scheduled Item"
-                            >
-                              <ArrowUpCircle size={12} />
-                              <span>DISPATCH</span>
-                            </button>
-                            {tx.invoiceNo && transactions.filter(t => t.invoiceNo === tx.invoiceNo && t.type === 'SCHEDULED').length > 1 && (
-                              <button 
-                                onClick={() => openPIDispatchModal(tx.invoiceNo!)}
-                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-all shadow-sm shadow-indigo-600/20 active:scale-95"
-                                title="Dispatch Entire PI"
-                              >
-                                <ArrowUpCircle size={12} />
-                                <span>PI</span>
-                              </button>
+                      <div className="w-px h-6 bg-slate-200" />
+                      <div className="flex flex-col">
+                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                        <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                          <UserIcon size={12} className="text-slate-400" /> {firstTx.salesPerson || 'N/A'}
+                        </span>
+                      </div>
+                      <div className="w-px h-6 bg-slate-200" />
+                      <div className="flex flex-col">
+                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Destination</p>
+                        <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                          <MapPin size={12} className="text-slate-400" /> {firstTx.sourceDestination || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-slate-400">
+                      {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Group Content */}
+                {isExpanded && (
+                  <div className="border-t border-slate-50 bg-slate-50/30">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-slate-100/50 text-slate-500 text-[9px] uppercase tracking-wider">
+                            <th className="px-6 py-2 font-black">
+                              <input 
+                                type="checkbox" 
+                                checked={allSelected}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const allIds = group.map(t => t.id);
+                                  if (allSelected) {
+                                    setSelectedTxIds(prev => prev.filter(id => !allIds.includes(id)));
+                                  } else {
+                                    setSelectedTxIds(prev => Array.from(new Set([...prev, ...allIds])));
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                              />
+                            </th>
+                            <th className="px-4 py-2 font-black">Item Name</th>
+                            <th className="px-4 py-2 font-black">Category</th>
+                            <th className="px-4 py-2 font-black">Quantity</th>
+                            <th className="px-4 py-2 font-black">Unit</th>
+                            {firstTx.type === 'FACTORY_IN' && (
+                              <>
+                                <th className="px-4 py-2 font-black">Production</th>
+                                <th className="px-4 py-2 font-black">Rejected</th>
+                              </>
                             )}
-                          </div>
-                        )}
-                        <button 
-                          onClick={() => openModal(tx.type, tx)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit Transaction"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button 
-                          onClick={() => initiateDelete('DELETE', { tx })}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Delete Transaction"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                        {tx.invoiceNo && transactions.filter(t => t.invoiceNo === tx.invoiceNo).length > 1 && (
-                          <button 
-                            onClick={() => initiateDelete('PI_DELETE', { invoiceNo: tx.invoiceNo })}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Delete Entire PI"
-                          >
-                            <Trash2 size={16} className="text-rose-400" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredTransactions.length === 0 && (
-                <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-slate-400 italic text-sm">
-                    No transactions found matching your criteria.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                            <th className="px-4 py-2 font-black text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {group.map((tx) => {
+                            const item = items.find(i => i.id === tx.itemId);
+                            const isSelected = selectedTxIds.includes(tx.id);
+                            return (
+                              <tr key={tx.id} className={`hover:bg-white transition-colors ${isSelected ? 'bg-indigo-50/50' : ''}`}>
+                                <td className="px-6 py-3">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected}
+                                    onChange={() => toggleSelectTx(tx.id)}
+                                    className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-xs font-bold text-slate-900">{item?.name || 'Unknown'}</td>
+                                <td className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                  {categories.find(c => c.id === item?.categoryId)?.name || 'General'}
+                                </td>
+                                <td className="px-4 py-3 text-xs font-black text-slate-900">{tx.quantity}</td>
+                                <td className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item?.unit}</td>
+                                {tx.type === 'FACTORY_IN' && (
+                                  <>
+                                    <td className="px-4 py-3 text-xs font-bold text-emerald-600">{tx.production || 0}</td>
+                                    <td className="px-4 py-3 text-xs font-bold text-rose-600">{tx.rejected || 0}</td>
+                                  </>
+                                )}
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button 
+                                      onClick={() => openModal(tx.type, tx)}
+                                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                    >
+                                      <Edit2 size={14} />
+                                    </button>
+                                    <button 
+                                      onClick={() => initiateDelete('DELETE', { tx })}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
+
+      {/* Factory In Modal */}
+      {isFactoryInModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100"
+          >
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+                  <Plus size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Factory Production</h2>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Record new production entry</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsFactoryInModalOpen(false)}
+                className="p-2 hover:bg-white rounded-xl transition-colors text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleFactoryInSubmit} className="p-6 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Category</label>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].map(catName => {
+                      const cat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+                      if (!cat) return null;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setFactoryInData({ ...factoryInData, categoryId: cat.id, itemId: '' })}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border-2 ${
+                            factoryInData.categoryId === cat.id 
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20' 
+                              : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200'
+                          }`}
+                        >
+                          {catName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <select
+                    value={factoryInData.categoryId}
+                    onChange={(e) => setFactoryInData({ ...factoryInData, categoryId: e.target.value, itemId: '' })}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                    required
+                  >
+                    <option value="">Or Select Another Category</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Item</label>
+                  <select
+                    value={factoryInData.itemId}
+                    onChange={(e) => setFactoryInData({ ...factoryInData, itemId: e.target.value })}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                    required
+                    disabled={!factoryInData.categoryId}
+                  >
+                    <option value="">Select Item</option>
+                    {items
+                      .filter(item => item.categoryId === factoryInData.categoryId)
+                      .map(item => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))
+                    }
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production Qty</label>
+                  <input
+                    type="number"
+                    value={factoryInData.production || ''}
+                    onChange={(e) => setFactoryInData({ ...factoryInData, production: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                    placeholder="0"
+                    min="0"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rejected Qty</label>
+                  <input
+                    type="number"
+                    value={factoryInData.rejected || ''}
+                    onChange={(e) => setFactoryInData({ ...factoryInData, rejected: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                    placeholder="0"
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Total Good Parts</p>
+                  <p className="text-2xl font-black text-indigo-600">
+                    {Math.max(0, factoryInData.production - factoryInData.rejected)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Current Stock Update</p>
+                  <p className="text-sm font-bold text-indigo-500">
+                    + {Math.max(0, factoryInData.production - factoryInData.rejected)} Units
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={factoryInData.date}
+                  onChange={(e) => setFactoryInData({ ...factoryInData, date: e.target.value })}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFactoryInModalOpen(false)}
+                  className="flex-1 px-6 py-3.5 rounded-2xl text-sm font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all uppercase tracking-widest"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-[2] px-6 py-3.5 rounded-2xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Plus size={18} />
+                      <span>Record Production</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* Modal */}
       {isModalOpen && (

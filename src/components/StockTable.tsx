@@ -14,7 +14,7 @@ import {
   TrendingDown
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, parseISO } from 'date-fns';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { toast } from 'react-hot-toast';
 
 export default function StockTable() {
@@ -22,12 +22,13 @@ export default function StockTable() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('ALL');
+  const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [dateRange, setDateRange] = useState({
     start: format(new Date(), 'yyyy-MM-dd'),
     end: format(new Date(), 'yyyy-MM-dd')
   });
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
@@ -54,7 +55,7 @@ export default function StockTable() {
 
   const filteredItems = items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory === 'ALL' || item.categoryId === filterCategory;
+    const matchesCategory = filterCategories.length === 0 || filterCategories.includes(item.categoryId);
     const isLow = item.currentStock <= item.minStock;
     const matchesStatus = filterStatus === 'ALL' || (filterStatus === 'LOW' ? isLow : !isLow);
     return matchesSearch && matchesCategory && matchesStatus;
@@ -71,8 +72,49 @@ export default function StockTable() {
     lowStockCount: items.filter(item => item.currentStock <= item.minStock).length
   };
 
-  const exportToExcel = () => {
-    const data = filteredItems.map(item => {
+  const lowStockCount = items.filter(item => item.currentStock <= item.minStock).length;
+
+  const toggleSelectItem = (id: string) => {
+    setSelectedItemIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItemIds.length === filteredItems.length) {
+      setSelectedItemIds([]);
+    } else {
+      setSelectedItemIds(filteredItems.map(i => i.id));
+    }
+  };
+
+  const exportToExcel = async () => {
+    const itemsToExport = selectedItemIds.length > 0 
+      ? items.filter(i => selectedItemIds.includes(i.id))
+      : filteredItems;
+
+    if (itemsToExport.length === 0) {
+      toast.error('No items to export');
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Current Stock');
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'Item Name', key: 'name', width: 30 },
+      { header: 'Category', key: 'category', width: 20 },
+      { header: 'Stock IN (Period)', key: 'stockIn', width: 15 },
+      { header: 'Stock OUT (Period)', key: 'stockOut', width: 15 },
+      { header: 'Current Stock', key: 'currentStock', width: 15 },
+      { header: 'Unit', key: 'unit', width: 10 },
+      { header: 'Minimum Stock', key: 'minStock', width: 15 },
+      { header: 'Status', key: 'status', width: 15 }
+    ];
+
+    // Add data
+    itemsToExport.forEach(item => {
       const itemTxs = transactions.filter(tx => tx.itemId === item.id);
       const stockIn = itemTxs
         .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
@@ -81,23 +123,58 @@ export default function StockTable() {
         .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
         .reduce((acc, tx) => acc + tx.quantity, 0);
 
-      return {
-        'Item Name': item.name,
-        'Category': categories.find(c => c.id === item.categoryId)?.name || 'Unknown',
-        'Stock IN (Period)': stockIn,
-        'Stock OUT (Period)': stockOut,
-        'Current Stock': item.currentStock,
-        'Unit': item.unit,
-        'Minimum Stock': item.minStock,
-        'Status': item.currentStock <= item.minStock ? 'Low Stock' : 'OK'
+      const row = worksheet.addRow({
+        name: item.name,
+        category: categories.find(c => c.id === item.categoryId)?.name || 'Unknown',
+        stockIn: stockIn,
+        stockOut: stockOut,
+        currentStock: item.currentStock,
+        unit: item.unit,
+        minStock: item.minStock,
+        status: item.currentStock <= item.minStock ? 'Low Stock' : 'OK'
+      });
+
+      // Apply row formatting (center alignment and borders)
+      row.eachCell((cell) => {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    });
+
+    // Format Header
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4F46E5' } // Indigo-600
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
       };
     });
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Current Stock");
-    XLSX.writeFile(wb, `Inventory_Stock_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-    toast.success('Stock report exported');
+    // Generate buffer and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `Inventory_Stock_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success(`${itemsToExport.length} items exported`);
   };
 
   return (
@@ -107,13 +184,27 @@ export default function StockTable() {
           <h1 className="text-xl font-bold text-slate-900">Current Stock Inventory</h1>
           <p className="text-xs text-slate-500">Real-time monitoring of all items and stock levels</p>
         </div>
-        <button 
-          onClick={exportToExcel}
-          className="flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm text-sm font-medium"
-        >
-          <Download size={18} />
-          <span>Export Report</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedItemIds.length > 0 && (
+            <button 
+              onClick={() => setSelectedItemIds([])}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 px-3 py-2 rounded-lg transition-colors"
+            >
+              Clear Selection ({selectedItemIds.length})
+            </button>
+          )}
+          <button 
+            onClick={exportToExcel}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all shadow-sm text-sm font-medium ${
+              selectedItemIds.length > 0 
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Download size={18} />
+            <span>{selectedItemIds.length > 0 ? `Export Selected (${selectedItemIds.length})` : 'Export All'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Global Summary Cards */}
@@ -183,19 +274,50 @@ export default function StockTable() {
           </div>
 
           <div className="lg:col-span-3 grid grid-cols-2 gap-2">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2">
-              <Filter size={14} className="text-slate-400 shrink-0" />
-              <select 
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="bg-transparent border-none p-0 focus:ring-0 w-full text-[10px] font-bold uppercase outline-none"
-              >
-                <option value="ALL">All Categories</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
+            <div className="relative group/filter">
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 h-full cursor-pointer hover:bg-slate-100 transition-colors">
+                <Filter size={14} className="text-slate-400 shrink-0" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 truncate">
+                  {filterCategories.length === 0 ? 'All Categories' : `${filterCategories.length} Selected`}
+                </span>
+              </div>
+              
+              {/* Multi-select Dropdown */}
+              <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] hidden group-hover/filter:block p-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="max-h-64 overflow-y-auto space-y-1 custom-scrollbar">
+                  <button
+                    onClick={() => setFilterCategories([])}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors ${
+                      filterCategories.length === 0 ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    All Categories
+                  </button>
+                  <div className="h-px bg-slate-100 my-1"></div>
+                  {categories.map(cat => (
+                    <label 
+                      key={cat.id}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      <input 
+                        type="checkbox"
+                        checked={filterCategories.includes(cat.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilterCategories([...filterCategories, cat.id]);
+                          } else {
+                            setFilterCategories(filterCategories.filter(id => id !== cat.id));
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">{cat.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
+
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-2">
               <AlertTriangle size={14} className="text-slate-400 shrink-0" />
               <select 
@@ -238,10 +360,18 @@ export default function StockTable() {
             return (
               <div 
                 key={item.id} 
-                className={`bg-white rounded-2xl border-2 transition-all active:scale-[0.98] overflow-hidden ${
+                className={`bg-white rounded-2xl border-2 transition-all active:scale-[0.98] overflow-hidden relative ${
                   isLow ? 'border-rose-100 bg-rose-50/5 shadow-lg shadow-rose-500/5' : 'border-slate-50 shadow-sm'
                 }`}
               >
+                <div className="absolute top-4 right-4 z-10">
+                  <input 
+                    type="checkbox"
+                    checked={selectedItemIds.includes(item.id)}
+                    onChange={() => toggleSelectItem(item.id)}
+                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </div>
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
@@ -309,6 +439,14 @@ export default function StockTable() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
+                <th className="px-4 py-3 font-semibold w-10">
+                  <input 
+                    type="checkbox"
+                    checked={selectedItemIds.length === filteredItems.length && filteredItems.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
                 <th className="px-4 py-3 font-semibold">Item Name</th>
                 <th className="px-4 py-3 font-semibold">Category</th>
                 <th className="px-4 py-3 font-semibold text-center">Stock IN</th>
@@ -331,7 +469,15 @@ export default function StockTable() {
                   .reduce((acc, tx) => acc + tx.quantity, 0);
 
                 return (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${selectedItemIds.includes(item.id) ? 'bg-indigo-50/30' : ''}`}>
+                    <td className="px-4 py-3">
+                      <input 
+                        type="checkbox"
+                        checked={selectedItemIds.includes(item.id)}
+                        onChange={() => toggleSelectItem(item.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="bg-slate-100 p-1.5 rounded-lg text-slate-600">

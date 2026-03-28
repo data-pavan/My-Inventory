@@ -150,7 +150,11 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       allow read: if isAuthenticated();
       allow create: if isStaff() && isValidTransaction(request.resource.data);
-      allow update: if isAdmin();
+      allow update: if isAdmin() || (
+        isStaff() && 
+        resource.data.type == 'SCHEDULED' && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['date'])
+      );
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.createdBy == request.auth.uid);
     }
   }

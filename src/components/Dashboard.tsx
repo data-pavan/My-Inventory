@@ -24,7 +24,10 @@ import {
   Clock,
   TrendingUp,
   Calendar,
-  Filter
+  Filter,
+  ChevronRight,
+  User,
+  MapPin
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -49,6 +52,14 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
 
   // Production Analytics State
   const [prodTimeframe, setProdTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  const [expandedRecentGroups, setExpandedRecentGroups] = useState<{ [key: string]: boolean }>({});
+  const toggleRecentGroup = (groupKey: string) => {
+    setExpandedRecentGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey]
+    }));
+  };
 
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
@@ -153,14 +164,30 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   const groupedRecentTransactions = useMemo(() => {
     const groups: { [key: string]: Transaction[] } = {};
     transactions.forEach(tx => {
-      if (!groups[tx.voucherNo]) {
-        groups[tx.voucherNo] = [];
+      const key = tx.invoiceNo || tx.voucherNo;
+      if (!groups[key]) {
+        groups[key] = [];
       }
-      groups[tx.voucherNo].push(tx);
+      groups[key].push(tx);
     });
-    return Object.values(groups)
-      .sort((a, b) => new Date(b[0].date).getTime() - new Date(a[0].date).getTime())
+    return Object.entries(groups)
+      .sort((a, b) => new Date(b[1][0].date).getTime() - new Date(a[1][0].date).getTime())
       .slice(0, 5);
+  }, [transactions]);
+
+  const groupedScheduled = useMemo(() => {
+    const scheduledTxs = transactions.filter(tx => tx.type === 'SCHEDULED');
+    const groups: { [key: string]: Transaction[] } = {};
+    scheduledTxs.forEach(tx => {
+      const key = tx.invoiceNo || tx.voucherNo;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(tx);
+    });
+    return Object.entries(groups).sort((a, b) => 
+      new Date(b[1][0].date).getTime() - new Date(a[1][0].date).getTime()
+    );
   }, [transactions]);
 
   const togglePin = (id: string) => {
@@ -317,16 +344,64 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[120px]">
-          <div className="flex items-center justify-between">
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-              <Clock size={20} />
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col min-h-[120px] col-span-2 lg:col-span-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                <Clock size={20} />
+              </div>
+              <div>
+                <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">Scheduled Orders</p>
+                <p className="text-xs font-bold text-slate-400">{groupedScheduled.length} Pending PIs</p>
+              </div>
             </div>
             <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Pending</span>
           </div>
-          <div>
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">Scheduled</p>
-            <p className="text-2xl font-black text-slate-900 leading-none mt-1">{globalStats.totalScheduled}</p>
+          
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            {groupedScheduled.map(([groupKey, groupTxs], index) => {
+              const firstTx = groupTxs[groupTxs.length - 1];
+              return (
+                <div key={groupKey} className="bg-slate-50/50 rounded-xl p-4 border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-black text-slate-400">{index + 1}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-[11px] font-black text-slate-900 truncate">{groupKey}</p>
+                        <span className="text-[8px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-lg uppercase tracking-widest">
+                          {groupTxs.length} Items
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                          <User size={10} /> {firstTx.salesPerson || 'N/A'}
+                        </p>
+                        <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                          <MapPin size={10} /> {firstTx.sourceDestination || 'N/A'}
+                        </p>
+                        <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                          <Calendar size={10} /> {format(new Date(firstTx.date), 'MMM d, yyyy')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setView('transactions')}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all shrink-0"
+                  >
+                    View Details
+                  </button>
+                </div>
+              );
+            })}
+            {groupedScheduled.length === 0 && (
+              <div className="py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                <Clock size={32} className="mx-auto text-slate-300 mb-3" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Scheduled Orders Found</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -711,89 +786,95 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
               View All <ArrowRight size={14} />
             </button>
           </div>
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-[9px] sm:text-[10px] uppercase tracking-wider">
-                  <th className="px-4 sm:px-5 py-2.5 font-semibold">Voucher</th>
-                  <th className="px-4 sm:px-5 py-2.5 font-semibold">Item</th>
-                  <th className="px-4 sm:px-5 py-2.5 font-semibold">Type</th>
-                  <th className="px-4 sm:px-5 py-2.5 font-semibold">Qty</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {transactions
-                  .filter(tx => {
-                    const itemMatch = selectedItemId === 'all' 
-                      ? (selectedCategoryId === 'all' || items.find(i => i.id === tx.itemId)?.categoryId === selectedCategoryId)
-                      : tx.itemId === selectedItemId;
-                    
-                    return itemMatch;
-                  })
-                  .slice(0, 8).map((tx) => (
-                  <tr 
-                    key={tx.id} 
-                    onClick={() => setView('transactions')}
-                    className="hover:bg-slate-50 transition-colors cursor-pointer"
-                  >
-                    <td className="px-4 sm:px-5 py-3 text-[10px] sm:text-xs font-medium text-slate-900">{tx.voucherNo}</td>
-                    <td className="px-4 sm:px-5 py-3 text-[10px] sm:text-xs text-slate-600 truncate max-w-[100px]">
-                      {items.find(i => i.id === tx.itemId)?.name || 'Unknown Item'}
-                    </td>
-                    <td className="px-4 sm:px-5 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-medium ${
-                        tx.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : 
-                        tx.type === 'OUT' ? 'bg-rose-100 text-rose-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`}>
-                        {tx.type}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-5 py-3 text-[10px] sm:text-xs text-slate-600">{tx.quantity}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile View - Grouped Recent Transactions */}
-          <div className="md:hidden p-4 space-y-3">
-            {groupedRecentTransactions.map((group) => {
-              const firstTx = group[0];
+          <div className="p-4 space-y-4">
+            {groupedRecentTransactions.map(([groupKey, groupTxs]) => {
+              const firstTx = groupTxs[0];
+              const isExpanded = expandedRecentGroups[groupKey];
+              
               return (
-                <div 
-                  key={firstTx.voucherNo}
-                  onClick={() => setView('transactions')}
-                  className="bg-slate-50/50 border border-slate-100 rounded-xl p-3 active:scale-[0.98] transition-all"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                        firstTx.type === 'IN' ? 'bg-emerald-100 text-emerald-600' : 
-                        firstTx.type === 'OUT' ? 'bg-rose-100 text-rose-600' : 
-                        'bg-amber-100 text-amber-600'
-                      }`}>
-                        {firstTx.type === 'IN' ? <TrendingUp size={16} /> : <Clock size={16} />}
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">{firstTx.voucherNo}</p>
-                        <p className="text-[9px] font-bold text-slate-400">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</p>
+                <div key={groupKey} className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                  <div 
+                    onClick={() => toggleRecentGroup(groupKey)}
+                    className="flex min-h-[80px] cursor-pointer hover:bg-slate-50/50 transition-colors"
+                  >
+                    {/* Left Side - 30% Details Area */}
+                    <div className="w-[30%] bg-slate-50/50 p-3 border-r border-slate-100 flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PI / Invoice</p>
+                          <p className="text-[10px] font-black text-slate-900 truncate">{groupKey}</p>
+                        </div>
+                        <div>
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                          <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.salesPerson || 'N/A'}</p>
+                        </div>
                       </div>
                     </div>
-                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-widest">
-                      {group.length} {group.length === 1 ? 'Item' : 'Items'}
-                    </span>
+
+                    {/* Right Side - Summary */}
+                    <div className="w-[70%] p-3 flex flex-col justify-between">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                            firstTx.type === 'IN' ? 'bg-emerald-100 text-emerald-600' : 
+                            firstTx.type === 'OUT' ? 'bg-rose-100 text-rose-600' : 
+                            'bg-amber-100 text-amber-600'
+                          }`}>
+                            {firstTx.type === 'IN' ? <TrendingUp size={16} /> : <Clock size={16} />}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-black text-slate-900 text-[11px] uppercase tracking-tight truncate">
+                              {firstTx.type === 'IN' ? 'Stock In' : firstTx.type === 'OUT' ? 'Stock Out' : 'Scheduled'}
+                            </h3>
+                            <p className="text-[9px] font-bold text-slate-400">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="bg-slate-100 text-slate-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                            {groupTxs.length} Items
+                          </div>
+                          <ChevronRight 
+                            size={16} 
+                            className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} 
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1">
-                    {group.slice(0, 2).map(tx => (
-                      <span key={tx.id} className="text-[9px] font-bold text-slate-500 bg-white border border-slate-100 px-2 py-0.5 rounded-lg">
-                        {items.find(i => i.id === tx.itemId)?.name} ({tx.quantity})
-                      </span>
-                    ))}
-                    {group.length > 2 && (
-                      <span className="text-[9px] font-bold text-slate-400 px-1">+{group.length - 2} more</span>
-                    )}
-                  </div>
+
+                  {/* Expanded Details */}
+                  {isExpanded && (
+                    <div className="bg-slate-50/30 p-3 space-y-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <MapPin size={12} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight truncate">
+                          {firstTx.sourceDestination || 'N/A'}
+                        </span>
+                      </div>
+                      {groupTxs.map((tx) => {
+                        const item = items.find(i => i.id === tx.itemId);
+                        return (
+                          <div key={tx.id} className="bg-white border border-slate-100 rounded-xl p-2 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100">
+                                <Package size={12} className="text-slate-400" />
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-slate-900 text-[10px] truncate">{item?.name || 'Unknown Item'}</h4>
+                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">{tx.quantity} {item?.unit}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <button 
+                        onClick={() => setView('transactions')}
+                        className="w-full mt-2 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-blue-600 uppercase tracking-widest hover:bg-blue-50 transition-all"
+                      >
+                        View Full Transaction
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
