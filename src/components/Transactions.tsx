@@ -79,6 +79,7 @@ export default function Transactions() {
     location: '',
     salesPerson: '',
     totalBoxes: 0,
+    shift: 'Day Shift',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
   });
@@ -139,6 +140,7 @@ export default function Transactions() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Main Submit triggered', modalType, formData);
     if (formData.items.some(i => !i.itemId)) return toast.error('Please select an item for all entries');
     
     setLoading(true);
@@ -197,8 +199,9 @@ export default function Transactions() {
           let newStock = oldStock;
           let newScheduledStock = oldScheduled;
 
-          if (modalType === 'IN') {
-            newStock = oldStock + entry.quantity;
+          if (modalType === 'IN' || modalType === 'FACTORY_IN') {
+            const qty = modalType === 'FACTORY_IN' ? Math.max(0, (entry.production || 0) - (entry.rejected || 0)) : entry.quantity;
+            newStock = oldStock + qty;
           } else if (modalType === 'OUT') {
             newStock = oldStock - entry.quantity;
             if (entry.fromScheduled) {
@@ -222,7 +225,7 @@ export default function Transactions() {
           if (targetTxId) {
             transaction.update(doc(db, 'transactions', targetTxId), {
               itemId: entry.itemId,
-              quantity: entry.quantity,
+              quantity: modalType === 'FACTORY_IN' ? Math.max(0, (entry.production || 0) - (entry.rejected || 0)) : entry.quantity,
               invoiceNo: formData.invoiceNo,
               sourceDestination: formData.sourceDestination,
               location: formData.location,
@@ -230,12 +233,15 @@ export default function Transactions() {
               totalBoxes: formData.totalBoxes,
               date: new Date(formData.date).toISOString(),
               type: modalType,
-              fromScheduled: entry.fromScheduled
+              fromScheduled: entry.fromScheduled,
+              production: entry.production || 0,
+              rejected: entry.rejected || 0,
+              shift: formData.shift || 'Day Shift'
             });
           } else {
             const txData = {
               itemId: entry.itemId,
-              quantity: entry.quantity,
+              quantity: modalType === 'FACTORY_IN' ? Math.max(0, (entry.production || 0) - (entry.rejected || 0)) : entry.quantity,
               invoiceNo: formData.invoiceNo,
               sourceDestination: formData.sourceDestination,
               location: formData.location,
@@ -247,7 +253,10 @@ export default function Transactions() {
               creatorEmail: profile?.email || auth.currentUser?.email || 'Unknown',
               creatorRole: profile?.role || 'staff',
               date: new Date(formData.date).toISOString(),
-              fromScheduled: entry.fromScheduled
+              fromScheduled: entry.fromScheduled,
+              production: entry.production || 0,
+              rejected: entry.rejected || 0,
+              shift: formData.shift || 'Day Shift'
             };
             transaction.set(doc(collection(db, 'transactions')), txData);
           }
@@ -274,6 +283,7 @@ export default function Transactions() {
 
   const handleFactoryInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Factory In Submit triggered', factoryInData);
     if (factoryInData.items.some(item => !item.itemId)) {
       return toast.error('Please select an item for all rows');
     }
@@ -281,17 +291,25 @@ export default function Transactions() {
     setLoading(true);
     try {
       await runTransaction(db, async (transaction) => {
+        const voucherNo = generateVoucherNo('FACTORY_IN');
+        
+        // 1. Perform all reads first
+        const itemSnaps = new Map<string, any>();
         for (const item of factoryInData.items) {
+          if (!itemSnaps.has(item.itemId)) {
+            const itemRef = doc(db, 'items', item.itemId);
+            const itemSnap = await transaction.get(itemRef);
+            if (!itemSnap.exists()) throw new Error(`Item ${item.itemId} not found`);
+            itemSnaps.set(item.itemId, { ref: itemRef, data: itemSnap.data() });
+          }
+        }
+
+        // 2. Perform all calculations and writes
+        for (const item of factoryInData.items) {
+          const itemInfo = itemSnaps.get(item.itemId);
           const totalGood = Math.max(0, item.production - item.rejected);
-          const itemRef = doc(db, 'items', item.itemId);
-          const itemSnap = await transaction.get(itemRef);
+          const newStock = (itemInfo.data.currentStock || 0) + totalGood;
           
-          if (!itemSnap.exists()) throw new Error(`Item ${item.itemId} not found`);
-          
-          const itemData = itemSnap.data() as Item;
-          const newStock = (itemData.currentStock || 0) + totalGood;
-          
-          const voucherNo = generateVoucherNo('FACTORY_IN');
           const txData = {
             itemId: item.itemId,
             quantity: totalGood,
@@ -307,18 +325,29 @@ export default function Transactions() {
           };
 
           transaction.set(doc(collection(db, 'transactions')), txData);
-          transaction.update(itemRef, { currentStock: newStock });
+          transaction.update(itemInfo.ref, { currentStock: newStock });
+          
+          // Update local map data for subsequent items of same itemId in same batch
+          itemInfo.data.currentStock = newStock;
         }
       });
 
       toast.success('Factory production recorded successfully');
       setIsFactoryInModalOpen(false);
+      
+      const allowedCategories = categories.filter(cat => 
+        ['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].includes(cat.name)
+      );
+      const firstCatId = allowedCategories.length > 0 ? allowedCategories[0].id : '';
+
       setFactoryInData({
         shift: 'Day Shift',
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        items: [{ categoryId: '', itemId: '', production: 0, rejected: 0 }]
+        items: [{ categoryId: firstCatId, itemId: '', production: 0, rejected: 0 }]
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Factory In Error:', error);
+      toast.error(error.message || 'Failed to record factory production');
       handleFirestoreError(error, OperationType.CREATE, 'transactions/factory-in');
     } finally {
       setLoading(false);
@@ -379,6 +408,7 @@ export default function Transactions() {
         location: tx.location || '',
         salesPerson: tx.salesPerson || '',
         totalBoxes: tx.totalBoxes || 0,
+        shift: tx.shift || 'Day Shift',
         date: (type === 'OUT' && tx.type === 'SCHEDULED') 
           ? format(new Date(), "yyyy-MM-dd'T'HH:mm") 
           : format(new Date(tx.date), "yyyy-MM-dd'T'HH:mm"),
@@ -400,6 +430,7 @@ export default function Transactions() {
         location: '',
         salesPerson: '',
         totalBoxes: 0,
+        shift: 'Day Shift',
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
       });
@@ -420,6 +451,7 @@ export default function Transactions() {
       location: firstTx.location || '',
       salesPerson: firstTx.salesPerson || '',
       totalBoxes: firstTx.totalBoxes || 0,
+      shift: firstTx.shift || 'Day Shift',
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
       items: relatedTxs.map(t => {
         const item = items.find(i => i.id === t.itemId);
@@ -610,9 +642,10 @@ export default function Transactions() {
     const matchesSearch = item?.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          tx.voucherNo.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesInvoice = !searchInvoice || (tx.invoiceNo || '').toLowerCase().includes(searchInvoice.toLowerCase());
-    const matchesSalesPerson = !searchSalesPerson || (tx.salesPerson || '').toLowerCase().includes(searchSalesPerson.toLowerCase());
-    const matchesSourceDest = !searchSourceDest || (tx.sourceDestination || '').toLowerCase().includes(searchSourceDest.toLowerCase());
+    // Ignore advanced filters for FACTORY_IN
+    const matchesInvoice = filterType === 'FACTORY_IN' || !searchInvoice || (tx.invoiceNo || '').toLowerCase().includes(searchInvoice.toLowerCase());
+    const matchesSalesPerson = filterType === 'FACTORY_IN' || !searchSalesPerson || (tx.salesPerson || '').toLowerCase().includes(searchSalesPerson.toLowerCase());
+    const matchesSourceDest = filterType === 'FACTORY_IN' || !searchSourceDest || (tx.sourceDestination || '').toLowerCase().includes(searchSourceDest.toLowerCase());
     
     const matchesType = filterType === 'ALL' || tx.type === filterType;
     
@@ -867,6 +900,7 @@ export default function Transactions() {
                 <option value="ALL">All Movements</option>
                 <option value="IN">Stock IN</option>
                 <option value="OUT">Stock OUT</option>
+                <option value="FACTORY_IN">Factory In</option>
                 <option value="SCHEDULED">Scheduled</option>
               </select>
             </div>
@@ -880,56 +914,58 @@ export default function Transactions() {
         </div>
 
         {/* Advanced Filters Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="relative">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">PI</div>
-            <input 
-              type="text" 
-              placeholder="Invoice No..." 
-              value={searchInvoice}
-              onChange={(e) => setSearchInvoice(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
-            />
-          </div>
-          <div className="relative">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">By</div>
-            <input 
-              type="text" 
-              placeholder="Sales Person..." 
-              value={searchSalesPerson}
-              onChange={(e) => setSearchSalesPerson(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
-            />
-          </div>
-          <div className="relative">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">To</div>
-            <input 
-              type="text" 
-              placeholder="Source/Dest..." 
-              value={searchSourceDest}
-              onChange={(e) => setSearchSourceDest(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
-            />
-          </div>
-          <div className="flex items-center gap-2 bg-slate-50/50 border border-slate-100 rounded-xl px-3 py-2">
-            <CalendarIcon size={14} className="text-slate-400 shrink-0" />
-            <div className="flex items-center gap-1 w-full">
+        {filterType !== 'FACTORY_IN' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">PI</div>
               <input 
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                className="bg-transparent border-none p-0 text-[10px] font-bold focus:ring-0 w-full outline-none"
-              />
-              <span className="text-slate-300">-</span>
-              <input 
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                className="bg-transparent border-none p-0 text-[10px] font-bold focus:ring-0 w-full outline-none"
+                type="text" 
+                placeholder="Invoice No..." 
+                value={searchInvoice}
+                onChange={(e) => setSearchInvoice(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
               />
             </div>
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">By</div>
+              <input 
+                type="text" 
+                placeholder="Sales Person..." 
+                value={searchSalesPerson}
+                onChange={(e) => setSearchSalesPerson(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
+              />
+            </div>
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">To</div>
+              <input 
+                type="text" 
+                placeholder="Source/Dest..." 
+                value={searchSourceDest}
+                onChange={(e) => setSearchSourceDest(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all text-xs font-bold"
+              />
+            </div>
+            <div className="flex items-center gap-2 bg-slate-50/50 border border-slate-100 rounded-xl px-3 py-2">
+              <CalendarIcon size={14} className="text-slate-400 shrink-0" />
+              <div className="flex items-center gap-1 w-full">
+                <input 
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  className="bg-transparent border-none p-0 text-[10px] font-bold focus:ring-0 w-full outline-none"
+                />
+                <span className="text-slate-300">-</span>
+                <input 
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  className="bg-transparent border-none p-0 text-[10px] font-bold focus:ring-0 w-full outline-none"
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Mobile View - Grouped Cards */}
@@ -1024,10 +1060,21 @@ export default function Transactions() {
                       <div className="mt-2 flex items-end justify-between">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1">
-                            <MapPin size={10} className="text-slate-400 shrink-0" />
-                            <p className="text-[10px] font-bold text-slate-500 truncate max-w-[120px]">
-                              {firstTx.sourceDestination || firstTx.location || 'No Location'}
-                            </p>
+                            {firstTx.type === 'FACTORY_IN' ? (
+                              <>
+                                <Clock size={10} className="text-slate-400 shrink-0" />
+                                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                                  {firstTx.shift || 'Day Shift'}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <MapPin size={10} className="text-slate-400 shrink-0" />
+                                <p className="text-[10px] font-bold text-slate-500 truncate max-w-[120px]">
+                                  {firstTx.sourceDestination || firstTx.location || 'No Location'}
+                                </p>
+                              </>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] font-bold text-slate-400">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</span>
@@ -1045,26 +1092,41 @@ export default function Transactions() {
                   <div className="border-t border-slate-50 bg-slate-50/30 animate-in slide-in-from-top-2 duration-200">
                     {/* Full Details Section */}
                     <div className="p-4 bg-white border-b border-slate-100 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Source/Destination</p>
-                        <p className="text-[10px] font-bold text-slate-700">{firstTx.sourceDestination || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Location</p>
-                        <p className="text-[10px] font-bold text-slate-700">{firstTx.location || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Invoice/PI No</p>
-                        <p className="text-[10px] font-bold text-slate-700">{firstTx.invoiceNo || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
-                        <p className="text-[10px] font-bold text-slate-700">{firstTx.salesPerson || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Boxes</p>
-                        <p className="text-[10px] font-bold text-slate-700">{firstTx.totalBoxes || 0}</p>
-                      </div>
+                      {firstTx.type === 'FACTORY_IN' ? (
+                        <>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Shift</p>
+                            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{firstTx.shift || 'Day Shift'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Production Date</p>
+                            <p className="text-[10px] font-bold text-slate-700">{format(new Date(firstTx.date), 'PPP')}</p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Source/Destination</p>
+                            <p className="text-[10px] font-bold text-slate-700">{firstTx.sourceDestination || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Location</p>
+                            <p className="text-[10px] font-bold text-slate-700">{firstTx.location || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Invoice/PI No</p>
+                            <p className="text-[10px] font-bold text-slate-700">{firstTx.invoiceNo || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                            <p className="text-[10px] font-bold text-slate-700">{firstTx.salesPerson || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Boxes</p>
+                            <p className="text-[10px] font-bold text-slate-700">{firstTx.totalBoxes || 0}</p>
+                          </div>
+                        </>
+                      )}
                       <div className="sm:col-span-2 lg:col-span-1">
                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Creator</p>
                         <p className="text-[10px] font-bold text-slate-700 truncate">{firstTx.creatorEmail}</p>
@@ -1100,6 +1162,18 @@ export default function Transactions() {
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
+                              {tx.type === 'FACTORY_IN' && (
+                                <div className="flex gap-3 mr-2">
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-black text-emerald-600">{tx.production || 0}</p>
+                                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Prod</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-black text-rose-600">{tx.rejected || 0}</p>
+                                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Rej</p>
+                                  </div>
+                                </div>
+                              )}
                               <div className="text-right">
                                 <p className="text-sm font-black text-slate-900">{tx.quantity}</p>
                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{item?.unit}</p>
@@ -1485,6 +1559,14 @@ export default function Transactions() {
                             placeholder="Select Item"
                             className="react-select-container"
                             classNamePrefix="react-select"
+                            isSearchable={true}
+                            openMenuOnFocus={true}
+                            autoFocus={index === 0}
+                            filterOption={(candidate, input) => {
+                              const searchTerms = input.toLowerCase().split(' ').filter(t => t);
+                              const label = candidate.label.toLowerCase();
+                              return searchTerms.every(term => label.includes(term));
+                            }}
                             styles={{
                               control: (base) => ({
                                 ...base,
@@ -1622,19 +1704,114 @@ export default function Transactions() {
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
                 {/* Header Info Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Invoice / PI No</label>
-                      <input
-                        type="text"
-                        value={formData.invoiceNo}
-                        onChange={(e) => setFormData({ ...formData, invoiceNo: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                        placeholder="INV-001"
-                      />
+                  {modalType === 'FACTORY_IN' ? (
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Shift</label>
+                      <div className="flex gap-2">
+                        {['Day Shift', 'Night Shift'].map(shift => (
+                          <button
+                            key={shift}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, shift })}
+                            className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${
+                              formData.shift === shift 
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20' 
+                                : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200'
+                            }`}
+                          >
+                            {shift}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date & Time</label>
+                  ) : (
+                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Invoice / PI No</label>
+                        <input
+                          type="text"
+                          value={formData.invoiceNo}
+                          onChange={(e) => setFormData({ ...formData, invoiceNo: e.target.value })}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                          placeholder="INV-001"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date & Time</label>
+                        <div className="relative">
+                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                          <input
+                            type="datetime-local"
+                            required
+                            value={formData.date}
+                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Location</label>
+                        <div className="relative">
+                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                          <input
+                            type="text"
+                            value={formData.location}
+                            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                            placeholder="Warehouse"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Total Boxes</label>
+                        <div className="relative">
+                          <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                          <input
+                            type="number"
+                            value={formData.totalBoxes}
+                            onChange={(e) => setFormData({ ...formData, totalBoxes: e.target.value === '' ? 0 : Number(e.target.value) })}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {modalType !== 'FACTORY_IN' && (
+                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
+                          {modalType === 'IN' ? 'Supplier / Source' : 
+                           modalType === 'OUT' ? 'Destination / Usage' :
+                           'Scheduled For'}
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.sourceDestination}
+                          onChange={(e) => setFormData({ ...formData, sourceDestination: e.target.value })}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                          placeholder="Entity Name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Sales Person</label>
+                        <div className="relative">
+                          <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                          <input
+                            type="text"
+                            value={formData.salesPerson}
+                            onChange={(e) => setFormData({ ...formData, salesPerson: e.target.value })}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                            placeholder="Name"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {modalType === 'FACTORY_IN' && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Production Date & Time</label>
                       <div className="relative">
                         <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
@@ -1646,63 +1823,7 @@ export default function Transactions() {
                         />
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Location</label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                          type="text"
-                          value={formData.location}
-                          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                          placeholder="Warehouse"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Total Boxes</label>
-                      <div className="relative">
-                        <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                          type="number"
-                          value={formData.totalBoxes}
-                          onChange={(e) => setFormData({ ...formData, totalBoxes: e.target.value === '' ? 0 : Number(e.target.value) })}
-                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
-                        {modalType === 'IN' ? 'Supplier / Source' : 
-                         modalType === 'OUT' ? 'Destination / Usage' :
-                         'Scheduled For'}
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.sourceDestination}
-                        onChange={(e) => setFormData({ ...formData, sourceDestination: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                        placeholder="Entity Name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Sales Person</label>
-                      <div className="relative">
-                        <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                          type="text"
-                          value={formData.salesPerson}
-                          onChange={(e) => setFormData({ ...formData, salesPerson: e.target.value })}
-                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                          placeholder="Name"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Items List */}
@@ -1774,6 +1895,14 @@ export default function Transactions() {
                                   placeholder="Choose item..."
                                   className="react-select-container"
                                   classNamePrefix="react-select"
+                                  isSearchable={true}
+                                  openMenuOnFocus={true}
+                                  isClearable={true}
+                                  filterOption={(candidate, input) => {
+                                    const searchTerms = input.toLowerCase().split(' ').filter(t => t);
+                                    const label = candidate.label.toLowerCase();
+                                    return searchTerms.every(term => label.includes(term));
+                                  }}
                                   styles={{
                                     control: (base) => ({
                                       ...base,
@@ -1808,17 +1937,48 @@ export default function Transactions() {
                           </div>
                           
                           <div className="flex items-center gap-4">
-                            <div className="flex-1">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Quantity</label>
-                              <input
-                                type="number"
-                                required
-                                min="1"
-                                value={item.quantity}
-                                onChange={(e) => updateItemRow(index, 'quantity', e.target.value === '' ? 0 : Number(e.target.value))}
-                                className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                              />
-                            </div>
+                            {modalType === 'FACTORY_IN' ? (
+                              <>
+                                <div className="flex-1">
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Production</label>
+                                  <input
+                                    type="number"
+                                    value={item.production}
+                                    onChange={(e) => updateItemRow(index, 'production', e.target.value === '' ? 0 : Number(e.target.value))}
+                                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Rejected</label>
+                                  <input
+                                    type="number"
+                                    value={item.rejected}
+                                    onChange={(e) => updateItemRow(index, 'rejected', e.target.value === '' ? 0 : Number(e.target.value))}
+                                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Good Parts</label>
+                                  <div className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-black text-indigo-600">
+                                    {Math.max(0, (item.production || 0) - (item.rejected || 0))}
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex-1">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Quantity</label>
+                                <input
+                                  type="number"
+                                  required
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => updateItemRow(index, 'quantity', e.target.value === '' ? 0 : Number(e.target.value))}
+                                  className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                                />
+                              </div>
+                            )}
                             {modalType === 'OUT' && (
                               <div className="pt-5">
                                 <label className="flex items-center gap-2 cursor-pointer group">

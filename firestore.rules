@@ -111,14 +111,17 @@ service cloud.firestore {
     function isValidTransaction(data) {
       return data.get('voucherNo', '') is string &&
              data.get('date', '') is string &&
-             data.get('type', '') in ['IN', 'OUT', 'SCHEDULED'] &&
+             data.get('type', '') in ['IN', 'OUT', 'SCHEDULED', 'FACTORY_IN'] &&
              data.get('itemId', '') is string &&
              data.get('quantity', 0) is number &&
              data.get('createdBy', '') == request.auth.uid &&
              data.get('creatorEmail', '') is string &&
              data.get('creatorRole', '') in ['admin', 'staff'] &&
              (!('totalBoxes' in data) || data.get('totalBoxes', 0) is number) &&
-             (!('fromScheduled' in data) || data.get('fromScheduled', false) is bool);
+             (!('fromScheduled' in data) || data.get('fromScheduled', false) is bool) &&
+             (!('production' in data) || data.get('production', 0) is number) &&
+             (!('rejected' in data) || data.get('rejected', 0) is number) &&
+             (!('shift' in data) || data.get('shift', '') is string);
     }
 
     // ===============================================================
