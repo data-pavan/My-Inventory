@@ -54,8 +54,11 @@ export default function ItemManagement() {
     try {
       if (editingItem) {
         // Calculate the difference in initial stock to adjust current stock
-        const initialStockDiff = formData.initialStock - editingItem.initialStock;
-        const newCurrentStock = editingItem.currentStock + initialStockDiff;
+        const oldInitialStock = Number(editingItem.initialStock) || 0;
+        const oldCurrentStock = Number(editingItem.currentStock) || 0;
+        const newInitialStock = Number(formData.initialStock) || 0;
+        const initialStockDiff = newInitialStock - oldInitialStock;
+        const newCurrentStock = oldCurrentStock + initialStockDiff;
         
         const updateData = {
           ...formData,
@@ -100,23 +103,25 @@ export default function ItemManagement() {
       const snap = await getDocs(q);
       const txs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
       
-      let calculated = Number(item.initialStock || 0);
-      txs.forEach(tx => {
+      let runningBalance = Number(item.initialStock || 0);
+      const sortedTxs = txs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const txsWithBalance = sortedTxs.map(tx => {
         const qty = Number(tx.quantity || 0);
-        if (isNaN(qty)) return;
-        
-        if (tx.type === 'IN' || tx.type === 'FACTORY_IN') {
-          calculated += qty;
-        } else if (tx.type === 'OUT') {
-          calculated -= qty;
+        if (!isNaN(qty)) {
+          if (tx.type === 'IN' || tx.type === 'FACTORY_IN') {
+            runningBalance += qty;
+          } else if (tx.type === 'OUT') {
+            runningBalance -= qty;
+          }
         }
+        return { ...tx, balanceAfter: runningBalance };
       });
 
       const currentStock = Number(item.currentStock || 0);
       setAuditData({
-        transactions: txs,
-        calculatedStock: calculated,
-        discrepancy: calculated - currentStock,
+        transactions: txsWithBalance,
+        calculatedStock: runningBalance,
+        discrepancy: runningBalance - currentStock,
         loading: false
       });
     } catch (error) {
@@ -239,7 +244,9 @@ export default function ItemManagement() {
         ) : (
           filteredItems.map((item) => {
             const category = categories.find(c => c.id === item.categoryId);
-            const isLowStock = item.currentStock <= item.minStock;
+            const currentStock = Number(item.currentStock) || 0;
+            const minStock = Number(item.minStock) || 0;
+            const isLowStock = currentStock <= minStock;
             return (
               <div key={item.id} className="bg-white rounded-2xl border-2 border-slate-50 p-4 shadow-sm transition-all active:scale-[0.98]">
                 <div className="flex justify-between items-start mb-4">
@@ -324,7 +331,9 @@ export default function ItemManagement() {
           <tbody className="divide-y divide-slate-100">
             {filteredItems.map((item) => {
               const category = categories.find(c => c.id === item.categoryId);
-              const isLowStock = item.currentStock <= item.minStock;
+              const currentStock = Number(item.currentStock) || 0;
+              const minStock = Number(item.minStock) || 0;
+              const isLowStock = currentStock <= minStock;
               return (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-4 py-3">
@@ -469,15 +478,16 @@ export default function ItemManagement() {
                             <th className="px-4 py-2">Type</th>
                             <th className="px-4 py-2">Voucher</th>
                             <th className="px-4 py-2 text-right">Qty</th>
+                            <th className="px-4 py-2 text-right">Balance</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {auditData.transactions.length === 0 ? (
                             <tr>
-                              <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">No transactions found for this item.</td>
+                              <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic">No transactions found for this item.</td>
                             </tr>
                           ) : (
-                            auditData.transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(tx => (
+                            [...auditData.transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(tx => (
                               <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                                 <td className="px-4 py-2 text-slate-600">{new Date(tx.date).toLocaleDateString()}</td>
                                 <td className="px-4 py-2">
@@ -494,6 +504,9 @@ export default function ItemManagement() {
                                   tx.type === 'OUT' ? 'text-rose-600' : 'text-slate-900'
                                 }`}>
                                   {tx.type === 'OUT' ? '-' : '+'}{tx.quantity}
+                                </td>
+                                <td className="px-4 py-2 text-right font-black text-slate-900">
+                                  {(tx as any).balanceAfter}
                                 </td>
                               </tr>
                             ))

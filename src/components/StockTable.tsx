@@ -362,7 +362,9 @@ export default function StockTable() {
         ) : (
           filteredItems.map((item) => {
             const category = categories.find(c => c.id === item.categoryId);
-            const isLow = item.currentStock <= item.minStock;
+            const currentStock = Number(item.currentStock) || 0;
+            const minStock = Number(item.minStock) || 0;
+            const isLow = currentStock <= minStock;
             
             const itemTxs = transactions.filter(tx => tx.itemId === item.id);
             const stockIn = itemTxs
@@ -473,7 +475,9 @@ export default function StockTable() {
             <tbody className="divide-y divide-slate-100">
               {filteredItems.map((item) => {
                 const category = categories.find(c => c.id === item.categoryId);
-                const isLow = item.currentStock <= item.minStock;
+                const currentStock = Number(item.currentStock) || 0;
+                const minStock = Number(item.minStock) || 0;
+                const isLow = currentStock <= minStock;
                 
                 const itemTxs = transactions.filter(tx => tx.itemId === item.id);
                 const stockIn = itemTxs

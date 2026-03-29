@@ -27,7 +27,12 @@ import {
   Filter,
   ChevronRight,
   User,
-  MapPin
+  MapPin,
+  ShieldCheck,
+  ShieldAlert,
+  Search,
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -52,6 +57,46 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
 
   // Production Analytics State
   const [prodTimeframe, setProdTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  // Health Check State
+  const [isHealthChecking, setIsHealthChecking] = useState(false);
+  const [healthResults, setHealthResults] = useState<{
+    totalItems: number;
+    discrepancyCount: number;
+    itemsWithDiscrepancy: { item: Item, calculated: number, current: number }[];
+  } | null>(null);
+
+  const runHealthCheck = () => {
+    setIsHealthChecking(true);
+    setTimeout(() => {
+      const results: { item: Item, calculated: number, current: number }[] = [];
+      
+      items.forEach(item => {
+        const itemTxs = transactions.filter(tx => tx.itemId === item.id);
+        let calculated = Number(item.initialStock || 0);
+        itemTxs.forEach(tx => {
+          const qty = Number(tx.quantity || 0);
+          if (tx.type === 'IN' || tx.type === 'FACTORY_IN') {
+            calculated += qty;
+          } else if (tx.type === 'OUT') {
+            calculated -= qty;
+          }
+        });
+        
+        const current = Number(item.currentStock || 0);
+        if (Math.abs(calculated - current) > 0.001) {
+          results.push({ item, calculated, current });
+        }
+      });
+
+      setHealthResults({
+        totalItems: items.length,
+        discrepancyCount: results.length,
+        itemsWithDiscrepancy: results
+      });
+      setIsHealthChecking(false);
+    }, 800);
+  };
 
   const [expandedRecentGroups, setExpandedRecentGroups] = useState<{ [key: string]: boolean }>({});
   const toggleRecentGroup = (groupKey: string) => {
@@ -329,6 +374,14 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
             <span>{isCustomizing ? 'Finish' : 'Select Items'}</span>
           </button>
           <button 
+            onClick={runHealthCheck}
+            disabled={isHealthChecking}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-lg text-indigo-700 hover:bg-indigo-100 transition-colors shadow-sm text-sm font-medium disabled:opacity-50"
+          >
+            {isHealthChecking ? <RefreshCw size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+            <span>Health Check</span>
+          </button>
+          <button 
             onClick={exportToExcel}
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm text-sm font-medium"
           >
@@ -491,7 +544,9 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-1 sm:px-0">
                   {categoryItems.map(item => {
-                    const isLow = item.currentStock <= item.minStock;
+                    const currentStock = Number(item.currentStock) || 0;
+                    const minStock = Number(item.minStock) || 0;
+                    const isLow = currentStock <= minStock;
                     const itemTxs = transactions.filter(tx => tx.itemId === item.id);
                     
                     const stockOutTotal = itemTxs
@@ -894,12 +949,12 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-sm sm:text-base font-bold text-slate-900">Low Stock Alerts</h3>
             <span className="bg-rose-100 text-rose-800 text-[8px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full">
-              {items.filter(item => item.currentStock <= item.minStock).length} Critical
+              {items.filter(item => (Number(item.currentStock) || 0) <= (Number(item.minStock) || 0)).length} Critical
             </span>
           </div>
           <div className="p-4 sm:p-5 space-y-2 sm:space-y-3">
             {items
-              .filter(item => item.currentStock <= item.minStock)
+              .filter(item => (Number(item.currentStock) || 0) <= (Number(item.minStock) || 0))
               .filter(item => {
                 const catMatch = selectedCategoryId === 'all' || item.categoryId === selectedCategoryId;
                 const itemMatch = selectedItemId === 'all' || item.id === selectedItemId;
@@ -921,7 +976,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                 </div>
               </div>
             ))}
-            {items.filter(item => item.currentStock <= item.minStock).length === 0 && (
+            {items.filter(item => (Number(item.currentStock) || 0) <= (Number(item.minStock) || 0)).length === 0 && (
               <div className="text-center py-6">
                 <p className="text-slate-400 text-[10px] sm:text-xs italic">All stock levels are healthy</p>
               </div>
@@ -929,6 +984,101 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           </div>
         </div>
       </div>
+
+      {/* Health Check Modal */}
+      {healthResults && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in duration-300 flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${healthResults.discrepancyCount > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                  {healthResults.discrepancyCount > 0 ? <ShieldAlert size={24} /> : <ShieldCheck size={24} />}
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">System Health Check</h3>
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">Audit complete for {healthResults.totalItems} items</p>
+                </div>
+              </div>
+              <button onClick={() => setHealthResults(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+              {healthResults.discrepancyCount === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <ShieldCheck size={40} />
+                  </div>
+                  <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">All Systems Nominal</h4>
+                  <p className="text-slate-500 text-sm mt-2">Every item's current stock matches its transaction history perfectly.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3">
+                    <AlertTriangle className="text-rose-600 shrink-0" size={20} />
+                    <div>
+                      <p className="text-sm font-bold text-rose-900">{healthResults.discrepancyCount} Discrepancies Found</p>
+                      <p className="text-xs text-rose-700 mt-1">The following items have stock levels that do not match their transaction logs. This may be due to manual edits or historical bugs.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Affected Items</h4>
+                    <div className="border border-slate-100 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase font-black">
+                          <tr>
+                            <th className="px-4 py-2">Item Name</th>
+                            <th className="px-4 py-2 text-right">Current</th>
+                            <th className="px-4 py-2 text-right">Calculated</th>
+                            <th className="px-4 py-2 text-right">Diff</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {healthResults.itemsWithDiscrepancy.map(({ item, calculated, current }) => (
+                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-4 py-2">
+                                <p className="font-bold text-slate-900">{item.name}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{item.unit}</p>
+                              </td>
+                              <td className="px-4 py-2 text-right font-medium text-slate-600">{current}</td>
+                              <td className="px-4 py-2 text-right font-black text-indigo-600">{calculated}</td>
+                              <td className="px-4 py-2 text-right">
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${calculated - current > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                  {calculated - current > 0 ? `+${(calculated - current).toFixed(2)}` : (calculated - current).toFixed(2)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <button 
+                onClick={() => setHealthResults(null)}
+                className="flex-1 px-6 py-4 rounded-2xl text-sm font-black text-slate-500 bg-white border-2 border-slate-200 hover:bg-slate-100 transition-all uppercase tracking-widest"
+              >
+                Close
+              </button>
+              {healthResults.discrepancyCount > 0 && (
+                <button 
+                  onClick={() => setView('items')}
+                  className="flex-[2] px-6 py-4 rounded-2xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest flex items-center justify-center gap-2"
+                >
+                  <Package size={18} />
+                  <span>Go to Item Management to Fix</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
