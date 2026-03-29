@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Item, Category, OperationType } from '../types';
+import { Item, Category, OperationType, Transaction } from '../types';
 import { handleFirestoreError } from '../utils/error-handler';
 import { toast } from 'react-hot-toast';
-import { Plus, Edit2, Trash2, X, Save, Package, Tag, Ruler, Search, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, Package, Tag, Ruler, Search, Filter, History, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function ItemManagement() {
   const [items, setItems] = useState<Item[]>([]);
@@ -23,6 +23,13 @@ export default function ItemManagement() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('ALL');
+  const [auditItem, setAuditItem] = useState<Item | null>(null);
+  const [auditData, setAuditData] = useState<{
+    transactions: Transaction[];
+    calculatedStock: number;
+    discrepancy: number;
+    loading: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
@@ -82,6 +89,57 @@ export default function ItemManagement() {
       toast.success('Item deleted successfully');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'items');
+    }
+  };
+
+  const handleAudit = async (item: Item) => {
+    setAuditItem(item);
+    setAuditData({ transactions: [], calculatedStock: 0, discrepancy: 0, loading: true });
+    try {
+      const q = query(collection(db, 'transactions'), where('itemId', '==', item.id));
+      const snap = await getDocs(q);
+      const txs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+      
+      let calculated = Number(item.initialStock || 0);
+      txs.forEach(tx => {
+        const qty = Number(tx.quantity || 0);
+        if (isNaN(qty)) return;
+        
+        if (tx.type === 'IN' || tx.type === 'FACTORY_IN') {
+          calculated += qty;
+        } else if (tx.type === 'OUT') {
+          calculated -= qty;
+        }
+      });
+
+      const currentStock = Number(item.currentStock || 0);
+      setAuditData({
+        transactions: txs,
+        calculatedStock: calculated,
+        discrepancy: calculated - currentStock,
+        loading: false
+      });
+    } catch (error) {
+      toast.error('Failed to audit stock');
+      setAuditData(null);
+      setAuditItem(null);
+    }
+  };
+
+  const fixStock = async () => {
+    if (!auditItem || !auditData) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'items', auditItem.id), {
+        currentStock: auditData.calculatedStock
+      });
+      toast.success('Stock corrected successfully');
+      setAuditItem(null);
+      setAuditData(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'items/fix-stock');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -198,6 +256,13 @@ export default function ItemManagement() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button 
+                      onClick={() => handleAudit(item)}
+                      className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors"
+                      title="Audit Stock"
+                    >
+                      <History size={20} />
+                    </button>
+                    <button 
                       onClick={() => openModal(item)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
                     >
@@ -212,22 +277,28 @@ export default function ItemManagement() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50/50 rounded-2xl border border-slate-100/50">
+                <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50/50 rounded-2xl border border-slate-100/50">
                   <div className="text-center">
-                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">Available</span>
-                    <span className={`text-sm font-black ${isLowStock ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      {item.currentStock} <span className="text-[10px]">{item.unit}</span>
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest block mb-1">Initial</span>
+                    <span className="text-xs font-black text-slate-600">
+                      {Number(item.initialStock) || 0}
+                    </span>
+                  </div>
+                  <div className="text-center border-l border-slate-200/50">
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest block mb-1">Available</span>
+                    <span className={`text-xs font-black ${isLowStock ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {Number(item.currentStock) || 0}
                     </span>
                   </div>
                   <div className="text-center border-x border-slate-200/50">
-                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">Scheduled</span>
-                    <span className="text-sm font-black text-amber-600">
-                      {item.scheduledStock || 0} <span className="text-[10px]">{item.unit}</span>
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest block mb-1">Scheduled</span>
+                    <span className="text-xs font-black text-amber-600">
+                      {Number(item.scheduledStock) || 0}
                     </span>
                   </div>
                   <div className="text-center">
-                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">Min Stock</span>
-                    <span className="text-sm font-black text-slate-900">{item.minStock}</span>
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest block mb-1">Min</span>
+                    <span className="text-xs font-black text-slate-900">{Number(item.minStock) || 0}</span>
                   </div>
                 </div>
               </div>
@@ -243,6 +314,7 @@ export default function ItemManagement() {
             <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wider">
               <th className="px-4 py-3 font-semibold">Item Name</th>
               <th className="px-4 py-3 font-semibold">Category</th>
+              <th className="px-4 py-3 font-semibold">Initial Stock</th>
               <th className="px-4 py-3 font-semibold">Available Stock</th>
               <th className="px-4 py-3 font-semibold">Scheduled</th>
               <th className="px-4 py-3 font-semibold">Unit</th>
@@ -269,20 +341,32 @@ export default function ItemManagement() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
+                    <span className="text-slate-600 text-sm font-medium">
+                      {Number(item.initialStock) || 0} {item.unit}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex flex-col">
                       <span className={`font-bold text-sm ${isLowStock ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {item.currentStock} {item.unit}
+                        {Number(item.currentStock) || 0} {item.unit}
                       </span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-semibold text-amber-600 text-sm">
-                      {item.scheduledStock || 0} {item.unit}
+                      {Number(item.scheduledStock) || 0} {item.unit}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-600 text-sm">{item.unit}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => handleAudit(item)}
+                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                        title="Audit Stock"
+                      >
+                        <History size={16} />
+                      </button>
                       <button 
                         onClick={() => openModal(item)}
                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -303,6 +387,146 @@ export default function ItemManagement() {
           </tbody>
         </table>
       </div>
+
+      {/* Stock Audit Modal */}
+      {auditItem && auditData && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in duration-300 flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <History size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Stock Audit</h3>
+                  <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">{auditItem.name}</p>
+                </div>
+              </div>
+              <button onClick={() => { setAuditItem(null); setAuditData(null); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+              {auditData.loading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <RefreshCw className="animate-spin text-blue-600" size={48} />
+                  <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Analyzing Transactions...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-1">Initial Stock</span>
+                      <span className="text-xl font-black text-slate-900">{auditItem.initialStock || 0}</span>
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-1">Current Stock</span>
+                      <span className="text-xl font-black text-slate-900">{auditItem.currentStock}</span>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-2xl border-blue-100">
+                      <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest block mb-1">Calculated</span>
+                      <span className="text-xl font-black text-blue-600">{isNaN(auditData.calculatedStock) ? '0' : auditData.calculatedStock}</span>
+                    </div>
+                  </div>
+
+                  {auditData.discrepancy !== 0 && !isNaN(auditData.discrepancy) ? (
+                    <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3">
+                      <AlertCircle className="text-rose-600 shrink-0" size={20} />
+                      <div>
+                        <p className="text-sm font-bold text-rose-900">Discrepancy Detected</p>
+                        <p className="text-xs text-rose-700 mt-1">
+                          The current stock ({auditItem.currentStock}) does not match the calculated stock ({auditData.calculatedStock}) based on transaction history.
+                          Difference: <span className="font-black">{auditData.discrepancy > 0 ? `+${auditData.discrepancy}` : auditData.discrepancy}</span>
+                        </p>
+                      </div>
+                    </div>
+                  ) : isNaN(auditData.discrepancy) ? (
+                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-3">
+                      <AlertCircle className="text-amber-600 shrink-0" size={20} />
+                      <div>
+                        <p className="text-sm font-bold text-amber-900">Audit Error</p>
+                        <p className="text-xs text-amber-700 mt-1">Could not calculate discrepancy due to invalid data in transactions.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-start gap-3">
+                      <RefreshCw className="text-emerald-600 shrink-0" size={20} />
+                      <div>
+                        <p className="text-sm font-bold text-emerald-900">Stock is Correct</p>
+                        <p className="text-xs text-emerald-700 mt-1">The current stock matches the transaction history perfectly.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Transaction History</h4>
+                    <div className="border border-slate-100 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase font-black">
+                          <tr>
+                            <th className="px-4 py-2">Date</th>
+                            <th className="px-4 py-2">Type</th>
+                            <th className="px-4 py-2">Voucher</th>
+                            <th className="px-4 py-2 text-right">Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {auditData.transactions.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">No transactions found for this item.</td>
+                            </tr>
+                          ) : (
+                            auditData.transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(tx => (
+                              <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-2 text-slate-600">{new Date(tx.date).toLocaleDateString()}</td>
+                                <td className="px-4 py-2">
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                    tx.type === 'IN' || tx.type === 'FACTORY_IN' ? 'bg-emerald-100 text-emerald-700' : 
+                                    tx.type === 'OUT' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {tx.type}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2 text-slate-900 font-medium">{tx.voucherNo}</td>
+                                <td className={`px-4 py-2 text-right font-bold ${
+                                  tx.type === 'IN' || tx.type === 'FACTORY_IN' ? 'text-emerald-600' : 
+                                  tx.type === 'OUT' ? 'text-rose-600' : 'text-slate-900'
+                                }`}>
+                                  {tx.type === 'OUT' ? '-' : '+'}{tx.quantity}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <button 
+                onClick={() => { setAuditItem(null); setAuditData(null); }}
+                className="flex-1 px-6 py-4 rounded-2xl text-sm font-black text-slate-500 bg-white border-2 border-slate-200 hover:bg-slate-100 transition-all uppercase tracking-widest"
+              >
+                Close
+              </button>
+              {auditData && auditData.discrepancy !== 0 && !auditData.loading && (
+                <button 
+                  onClick={fixStock}
+                  disabled={loading}
+                  className="flex-[2] px-6 py-4 rounded-2xl text-sm font-black text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-all shadow-lg shadow-amber-600/20 uppercase tracking-widest flex items-center justify-center gap-2"
+                >
+                  {loading ? <RefreshCw className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+                  <span>Fix Discrepancy</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       {isModalOpen && (

@@ -60,8 +60,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co"] ||
-         request.auth.token.get('email', '') in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co"] ||
+        (request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co", "general@inventorypro.app"] ||
+         request.auth.token.get('email', '') in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co", "general@inventorypro.app"] ||
          request.auth.uid == "EtTxydwOeIgqb7GcwoVPGECwA5s2" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin'));
@@ -105,6 +105,7 @@ service cloud.firestore {
              data.get('unit', '') is string &&
              data.get('minStock', 0) is number &&
              data.get('currentStock', 0) is number &&
+             data.get('initialStock', 0) is number &&
              (!('scheduledStock' in data) || data.get('scheduledStock', 0) is number);
     }
 

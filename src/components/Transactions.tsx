@@ -225,7 +225,7 @@ export default function Transactions() {
           if (targetTxId) {
             transaction.update(doc(db, 'transactions', targetTxId), {
               itemId: entry.itemId,
-              quantity: modalType === 'FACTORY_IN' ? Math.max(0, (entry.production || 0) - (entry.rejected || 0)) : entry.quantity,
+              quantity: Number(modalType === 'FACTORY_IN' ? Math.max(0, (entry.production || 0) - (entry.rejected || 0)) : entry.quantity),
               invoiceNo: formData.invoiceNo,
               sourceDestination: formData.sourceDestination,
               location: formData.location,
@@ -241,7 +241,7 @@ export default function Transactions() {
           } else {
             const txData = {
               itemId: entry.itemId,
-              quantity: modalType === 'FACTORY_IN' ? Math.max(0, (entry.production || 0) - (entry.rejected || 0)) : entry.quantity,
+              quantity: Number(modalType === 'FACTORY_IN' ? Math.max(0, (entry.production || 0) - (entry.rejected || 0)) : entry.quantity),
               invoiceNo: formData.invoiceNo,
               sourceDestination: formData.sourceDestination,
               location: formData.location,
@@ -590,7 +590,7 @@ export default function Transactions() {
           let newStock = currentStock;
           let newScheduledStock = scheduledStock;
 
-          if (tx.type === 'IN') {
+          if (tx.type === 'IN' || tx.type === 'FACTORY_IN') {
             newStock = currentStock - tx.quantity;
           } else if (tx.type === 'OUT') {
             if (tx.fromScheduled) {

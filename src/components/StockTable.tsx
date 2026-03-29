@@ -230,7 +230,7 @@ export default function StockTable() {
           </div>
           <div>
             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Stock In</p>
-            <p className="text-xl font-bold text-slate-900">{globalStats.stockIn}</p>
+            <p className="text-xl font-bold text-slate-900">{Number(globalStats.stockIn) || 0}</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
@@ -239,7 +239,7 @@ export default function StockTable() {
           </div>
           <div>
             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Stock Out</p>
-            <p className="text-xl font-bold text-slate-900">{globalStats.stockOut}</p>
+            <p className="text-xl font-bold text-slate-900">{Number(globalStats.stockOut) || 0}</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
@@ -248,7 +248,7 @@ export default function StockTable() {
           </div>
           <div>
             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Low Stock</p>
-            <p className="text-xl font-bold text-slate-900">{globalStats.lowStockCount}</p>
+            <p className="text-xl font-bold text-slate-900">{Number(globalStats.lowStockCount) || 0}</p>
           </div>
         </div>
       </div>
@@ -416,16 +416,16 @@ export default function StockTable() {
                   <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50/50 rounded-2xl border border-slate-100/50">
                     <div className="text-center">
                       <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">In</span>
-                      <span className="text-sm font-black text-emerald-600">{stockIn}</span>
+                      <span className="text-sm font-black text-emerald-600">{Number(stockIn) || 0}</span>
                     </div>
                     <div className="text-center border-x border-slate-200/50">
                       <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">Out</span>
-                      <span className="text-sm font-black text-rose-600">{stockOut}</span>
+                      <span className="text-sm font-black text-rose-600">{Number(stockOut) || 0}</span>
                     </div>
                     <div className="text-center">
                       <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest block mb-1">Current</span>
                       <div className="flex items-center justify-center gap-0.5">
-                        <span className={`text-sm font-black ${isLow ? 'text-rose-600' : 'text-slate-900'}`}>{item.currentStock}</span>
+                        <span className={`text-sm font-black ${isLow ? 'text-rose-600' : 'text-slate-900'}`}>{Number(item.currentStock) || 0}</span>
                         <span className="text-[9px] text-slate-400 font-bold">{item.unit}</span>
                       </div>
                     </div>
@@ -505,15 +505,15 @@ export default function StockTable() {
                       <span className="text-xs text-slate-600">{category?.name || 'Unknown'}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="font-bold text-emerald-600 text-sm">{stockIn}</span>
+                      <span className="font-bold text-emerald-600 text-sm">{Number(stockIn) || 0}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="font-bold text-rose-600 text-sm">{stockOut}</span>
+                      <span className="font-bold text-rose-600 text-sm">{Number(stockOut) || 0}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <span className={`text-base font-bold ${isLow ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          {item.currentStock}
+                          {Number(item.currentStock) || 0}
                         </span>
                         <span className="text-[10px] text-slate-400 font-medium">{item.unit}</span>
                       </div>

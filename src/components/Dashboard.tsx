@@ -349,7 +349,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           </div>
           <div>
             <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">Low Stock</p>
-            <p className="text-2xl font-black text-slate-900 leading-none mt-1">{globalStats.lowStockCount}</p>
+            <p className="text-2xl font-black text-slate-900 leading-none mt-1">{Number(globalStats.lowStockCount) || 0}</p>
           </div>
         </div>
 
@@ -511,9 +511,9 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                             <Package size={24} />
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            {item.scheduledStock > 0 && (
+                            {Number(item.scheduledStock) > 0 && (
                               <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-widest">
-                                {item.scheduledStock} Sch
+                                {Number(item.scheduledStock) || 0} Sch
                               </span>
                             )}
                             {isLow && (
@@ -525,22 +525,22 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                         </div>
                         <h3 className="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-1 truncate">{item.name}</h3>
                         <div className="flex items-baseline gap-1.5">
-                          <p className="text-3xl font-black text-slate-900 leading-none">{item.currentStock}</p>
-                          <span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">{item.unit}</span>
+                          <p className="text-3xl font-black text-slate-900 leading-none">{Number(item.currentStock) || 0}</p>
+                          <span className="text-11px text-slate-400 font-bold uppercase tracking-widest">{item.unit}</span>
                         </div>
                         
                         <div className="mt-6 pt-5 border-t border-slate-50 grid grid-cols-3 gap-2">
                           <div className="text-center">
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">In</p>
-                            <p className="text-xs font-black text-emerald-600">{stockInTotal}</p>
+                            <p className="text-xs font-black text-emerald-600">{Number(stockInTotal) || 0}</p>
                           </div>
                           <div className="text-center border-x border-slate-50">
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Out</p>
-                            <p className="text-xs font-black text-rose-600">{stockOutTotal}</p>
+                            <p className="text-xs font-black text-rose-600">{Number(stockOutTotal) || 0}</p>
                           </div>
                           <div className="text-center">
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Sch</p>
-                            <p className="text-xs font-black text-amber-600">{scheduledTotal}</p>
+                            <p className="text-xs font-black text-amber-600">{Number(scheduledTotal) || 0}</p>
                           </div>
                         </div>
                       </div>
