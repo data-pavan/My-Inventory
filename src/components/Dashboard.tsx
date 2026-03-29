@@ -23,6 +23,8 @@ import {
   Download,
   Clock,
   TrendingUp,
+  TrendingDown,
+  Plus,
   Calendar,
   Filter,
   ChevronRight,
@@ -78,7 +80,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           const qty = Number(tx.quantity || 0);
           if (tx.type === 'IN' || tx.type === 'FACTORY_IN') {
             calculated += qty;
-          } else if (tx.type === 'OUT') {
+          } else if (tx.type === 'OUT' || tx.type === 'SCHEDULED') {
             calculated -= qty;
           }
         });
@@ -550,10 +552,10 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                     const itemTxs = transactions.filter(tx => tx.itemId === item.id);
                     
                     const stockOutTotal = itemTxs
-                      .filter(tx => tx.type === 'OUT')
+                      .filter(tx => tx.type === 'OUT' || tx.type === 'SCHEDULED')
                       .reduce((acc, tx) => acc + tx.quantity, 0);
                     const stockInTotal = itemTxs
-                      .filter(tx => tx.type === 'IN')
+                      .filter(tx => tx.type === 'IN' || tx.type === 'FACTORY_IN')
                       .reduce((acc, tx) => acc + tx.quantity, 0);
                     const scheduledTotal = itemTxs
                       .filter(tx => tx.type === 'SCHEDULED')
@@ -795,29 +797,29 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                           <p className="font-bold text-slate-900 text-xs sm:text-sm mb-2">{label}</p>
                           <div className="space-y-3">
                             <div>
-                              <p className="text-[10px] sm:text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Stock IN: {data.in}</p>
+                              <p className="text-[10px] sm:text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">Stock IN: {Number(data.in) || 0}</p>
                               {Object.entries(data.inBreakdown).map(([name, qty]: any) => (
                                 <p key={name} className="text-[9px] sm:text-[11px] text-slate-600 flex justify-between">
                                   <span>{name}</span>
-                                  <span className="font-medium">{qty}</span>
+                                  <span className="font-medium">{Number(qty) || 0}</span>
                                 </p>
                               ))}
                             </div>
                             <div className="pt-2 border-t border-slate-50">
-                              <p className="text-[10px] sm:text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">Stock OUT: {data.out}</p>
+                              <p className="text-[10px] sm:text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">Stock OUT: {Number(data.out) || 0}</p>
                               {Object.entries(data.outBreakdown).map(([name, qty]: any) => (
                                 <p key={name} className="text-[9px] sm:text-[11px] text-slate-600 flex justify-between">
                                   <span>{name}</span>
-                                  <span className="font-medium">{qty}</span>
+                                  <span className="font-medium">{Number(qty) || 0}</span>
                                 </p>
                               ))}
                             </div>
                             <div className="pt-2 border-t border-slate-50">
-                              <p className="text-[10px] sm:text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">Scheduled: {data.scheduled}</p>
+                              <p className="text-[10px] sm:text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">Scheduled: {Number(data.scheduled) || 0}</p>
                               {Object.entries(data.scheduledBreakdown).map(([name, qty]: any) => (
                                 <p key={name} className="text-[9px] sm:text-[11px] text-slate-600 flex justify-between">
                                   <span>{name}</span>
-                                  <span className="font-medium">{qty}</span>
+                                  <span className="font-medium">{Number(qty) || 0}</span>
                                 </p>
                               ))}
                             </div>
@@ -882,13 +884,20 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                             firstTx.type === 'IN' ? 'bg-emerald-100 text-emerald-600' : 
                             firstTx.type === 'OUT' ? 'bg-rose-100 text-rose-600' : 
+                            firstTx.type === 'FACTORY_IN' ? 'bg-indigo-100 text-indigo-600' :
                             'bg-amber-100 text-amber-600'
                           }`}>
-                            {firstTx.type === 'IN' ? <TrendingUp size={16} /> : <Clock size={16} />}
+                            {firstTx.type === 'IN' ? <TrendingUp size={16} /> : 
+                             firstTx.type === 'OUT' ? <TrendingDown size={16} /> :
+                             firstTx.type === 'FACTORY_IN' ? <Plus size={16} /> :
+                             <Clock size={16} />}
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-black text-slate-900 text-[11px] uppercase tracking-tight truncate">
-                              {firstTx.type === 'IN' ? 'Stock In' : firstTx.type === 'OUT' ? 'Stock Out' : 'Scheduled'}
+                              {firstTx.type === 'IN' ? 'Stock In' : 
+                               firstTx.type === 'OUT' ? 'Stock Out' : 
+                               firstTx.type === 'FACTORY_IN' ? 'Factory In' :
+                               'Scheduled'}
                             </h3>
                             <p className="text-[9px] font-bold text-slate-400">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</p>
                           </div>

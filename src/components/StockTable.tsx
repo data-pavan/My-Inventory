@@ -71,10 +71,10 @@ export default function StockTable() {
   const globalStats = {
     totalStock: items.reduce((acc, item) => acc + item.currentStock, 0),
     stockIn: transactions
-      .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+      .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
       .reduce((acc, tx) => acc + tx.quantity, 0),
     stockOut: transactions
-      .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+      .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
       .reduce((acc, tx) => acc + tx.quantity, 0),
     lowStockCount: items.filter(item => item.currentStock <= item.minStock).length
   };
@@ -132,10 +132,10 @@ export default function StockTable() {
     itemsToExport.forEach(item => {
       const itemTxs = transactions.filter(tx => tx.itemId === item.id);
       const stockIn = itemTxs
-        .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+        .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
         .reduce((acc, tx) => acc + tx.quantity, 0);
       const stockOut = itemTxs
-        .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+        .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
         .reduce((acc, tx) => acc + tx.quantity, 0);
 
       const row = worksheet.addRow({

@@ -81,13 +81,14 @@ export default function Transactions() {
     totalBoxes: 0,
     shift: 'Day Shift',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
+    items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
   });
 
   const [factoryInData, setFactoryInData] = useState({
-    shift: 'Day Shift',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    items: [{ categoryId: '', itemId: '', production: 0, rejected: 0 }]
+    salesPerson: '',
+    sourceDestination: '',
+    items: [{ categoryId: '', itemId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
   });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -182,7 +183,7 @@ export default function Transactions() {
 
           // Reverse old effect if editing
           if (originalTx) {
-            if (originalTx.type === 'IN') {
+            if (originalTx.type === 'IN' || originalTx.type === 'FACTORY_IN') {
               oldStock -= originalTx.quantity;
             } else if (originalTx.type === 'OUT') {
               oldStock += originalTx.quantity;
@@ -236,7 +237,7 @@ export default function Transactions() {
               fromScheduled: entry.fromScheduled,
               production: entry.production || 0,
               rejected: entry.rejected || 0,
-              shift: formData.shift || 'Day Shift'
+              shift: modalType === 'FACTORY_IN' ? (entry.shift || 'Day Shift') : (formData.shift || 'Day Shift')
             });
           } else {
             const txData = {
@@ -256,7 +257,7 @@ export default function Transactions() {
               fromScheduled: entry.fromScheduled,
               production: entry.production || 0,
               rejected: entry.rejected || 0,
-              shift: formData.shift || 'Day Shift'
+              shift: modalType === 'FACTORY_IN' ? (entry.shift || 'Day Shift') : (formData.shift || 'Day Shift')
             };
             transaction.set(doc(collection(db, 'transactions')), txData);
           }
@@ -315,7 +316,9 @@ export default function Transactions() {
             quantity: totalGood,
             production: item.production,
             rejected: item.rejected,
-            shift: factoryInData.shift,
+            shift: item.shift || 'Day Shift',
+            salesPerson: factoryInData.salesPerson,
+            sourceDestination: factoryInData.sourceDestination,
             voucherNo,
             type: 'FACTORY_IN',
             createdBy: auth.currentUser?.uid,
@@ -341,9 +344,10 @@ export default function Transactions() {
       const firstCatId = allowedCategories.length > 0 ? allowedCategories[0].id : '';
 
       setFactoryInData({
-        shift: 'Day Shift',
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        items: [{ categoryId: firstCatId, itemId: '', production: 0, rejected: 0 }]
+        salesPerson: '',
+        sourceDestination: '',
+        items: [{ categoryId: firstCatId, itemId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
       });
     } catch (error: any) {
       console.error('Factory In Error:', error);
@@ -362,7 +366,7 @@ export default function Transactions() {
     
     setFactoryInData({
       ...factoryInData,
-      items: [...factoryInData.items, { categoryId: firstCatId, itemId: '', production: 0, rejected: 0 }]
+      items: [...factoryInData.items, { categoryId: firstCatId, itemId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
     });
   };
 
@@ -389,9 +393,10 @@ export default function Transactions() {
     const firstCatId = allowedCategories.length > 0 ? allowedCategories[0].id : '';
     
     setFactoryInData({
-      shift: 'Day Shift',
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-      items: [{ categoryId: firstCatId, itemId: '', production: 0, rejected: 0 }]
+      salesPerson: '',
+      sourceDestination: '',
+      items: [{ categoryId: firstCatId, itemId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
     });
     setIsFactoryInModalOpen(true);
   };
@@ -419,7 +424,8 @@ export default function Transactions() {
           fromScheduled: type === 'OUT' && tx.type === 'SCHEDULED' ? true : (tx.fromScheduled || false),
           originalTxId: tx.id,
           production: tx.production || 0,
-          rejected: tx.rejected || 0
+          rejected: tx.rejected || 0,
+          shift: tx.shift || 'Day Shift'
         }]
       });
     } else {
@@ -432,7 +438,7 @@ export default function Transactions() {
         totalBoxes: 0,
         shift: 'Day Shift',
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
+        items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
       });
     }
     setIsModalOpen(true);
@@ -462,7 +468,8 @@ export default function Transactions() {
           fromScheduled: true,
           originalTxId: t.id,
           production: 0,
-          rejected: 0
+          rejected: 0,
+          shift: t.shift || 'Day Shift'
         };
       })
     });
@@ -472,7 +479,7 @@ export default function Transactions() {
   const addItemRow = () => {
     setFormData(prev => ({
       ...prev,
-      items: [...prev.items, { categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0 }]
+      items: [...prev.items, { categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
     }));
   };
 
@@ -667,10 +674,16 @@ export default function Transactions() {
   const groupedTransactions = React.useMemo(() => {
     const groups: { [key: string]: Transaction[] } = {};
     filteredTransactions.forEach(tx => {
-      if (!groups[tx.voucherNo]) {
-        groups[tx.voucherNo] = [];
+      // Group FACTORY_IN by date (YYYY-MM-DD)
+      // Others by voucherNo
+      const key = tx.type === 'FACTORY_IN' 
+        ? `F-${format(new Date(tx.date), 'yyyy-MM-dd')}`
+        : tx.voucherNo;
+
+      if (!groups[key]) {
+        groups[key] = [];
       }
-      groups[tx.voucherNo].push(tx);
+      groups[key].push(tx);
     });
     return Object.values(groups).sort((a, b) => 
       new Date(b[0].date).getTime() - new Date(a[0].date).getTime()
@@ -1004,8 +1017,12 @@ export default function Transactions() {
                     <div className="w-[30%] bg-slate-50/80 p-3 border-r border-slate-100 flex flex-col justify-between">
                       <div className="space-y-2">
                         <div>
-                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PI / Invoice</p>
-                          <p className="text-[10px] font-black text-slate-900 truncate">{firstTx.invoiceNo || 'N/A'}</p>
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
+                            {firstTx.type === 'FACTORY_IN' ? 'Shift' : 'PI / Invoice'}
+                          </p>
+                          <p className="text-[10px] font-black text-slate-900 truncate">
+                            {firstTx.type === 'FACTORY_IN' ? (firstTx.shift || 'Day Shift') : (firstTx.invoiceNo || 'N/A')}
+                          </p>
                         </div>
                         <div>
                           <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
@@ -1047,9 +1064,13 @@ export default function Transactions() {
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-black text-slate-900 text-[11px] uppercase tracking-tight truncate">
-                              {firstTx.type.replace('_', ' ')} Entry
+                              {firstTx.type === 'FACTORY_IN' 
+                                ? format(new Date(firstTx.date), 'EEEE, MMMM d, yyyy')
+                                : `${firstTx.type.replace('_', ' ')} Entry`}
                             </h3>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{voucherNo}</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                              {firstTx.type === 'FACTORY_IN' ? 'Production Summary' : voucherNo}
+                            </p>
                           </div>
                         </div>
                         <div className="text-slate-400 shrink-0">
@@ -1059,25 +1080,28 @@ export default function Transactions() {
 
                       <div className="mt-2 flex items-end justify-between">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            {firstTx.type === 'FACTORY_IN' ? (
-                              <>
+                          {firstTx.type !== 'FACTORY_IN' && (
+                            <>
+                              <div className="flex items-center gap-1">
                                 <Clock size={10} className="text-slate-400 shrink-0" />
                                 <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
                                   {firstTx.shift || 'Day Shift'}
                                 </p>
-                              </>
-                            ) : (
-                              <>
+                              </div>
+                              <div className="flex items-center gap-1">
                                 <MapPin size={10} className="text-slate-400 shrink-0" />
                                 <p className="text-[10px] font-bold text-slate-500 truncate max-w-[120px]">
                                   {firstTx.sourceDestination || firstTx.location || 'No Location'}
                                 </p>
-                              </>
-                            )}
-                          </div>
+                              </div>
+                            </>
+                          )}
                           <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-bold text-slate-400">{format(new Date(firstTx.date), 'MMM d, HH:mm')}</span>
+                            <span className="text-[9px] font-bold text-slate-400">
+                              {firstTx.type === 'FACTORY_IN' 
+                                ? format(new Date(firstTx.date), 'MMM d, yyyy')
+                                : format(new Date(firstTx.date), 'MMM d, HH:mm')}
+                            </span>
                             <span className="w-1 h-1 rounded-full bg-slate-200"></span>
                             <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">{group.length} {group.length === 1 ? 'Item' : 'Items'}</span>
                           </div>
@@ -1095,12 +1119,12 @@ export default function Transactions() {
                       {firstTx.type === 'FACTORY_IN' ? (
                         <>
                           <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Shift</p>
-                            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{firstTx.shift || 'Day Shift'}</p>
-                          </div>
-                          <div>
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Production Date</p>
                             <p className="text-[10px] font-bold text-slate-700">{format(new Date(firstTx.date), 'PPP')}</p>
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Items</p>
+                            <p className="text-[10px] font-bold text-slate-700">{group.length}</p>
                           </div>
                         </>
                       ) : (
@@ -1156,9 +1180,19 @@ export default function Transactions() {
                               }`} />
                               <div className="min-w-0">
                                 <p className="text-xs font-bold text-slate-800 truncate">{item?.name || 'Unknown Item'}</p>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                                  {categories.find(c => c.id === item?.categoryId)?.name || 'General'}
-                                </p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                    {categories.find(c => c.id === item?.categoryId)?.name || 'General'}
+                                  </p>
+                                  {tx.type === 'FACTORY_IN' && (
+                                    <>
+                                      <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                      <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">
+                                        {tx.shift || 'Day Shift'}
+                                      </p>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
@@ -1310,9 +1344,11 @@ export default function Transactions() {
                     )}
                     <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
                       <div className="flex flex-col">
-                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PI / Invoice</p>
+                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
+                          {firstTx.type === 'FACTORY_IN' ? 'Shift' : 'PI / Invoice'}
+                        </p>
                         <span className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
-                          {firstTx.invoiceNo || 'N/A'}
+                          {firstTx.type === 'FACTORY_IN' ? (firstTx.shift || 'Day Shift') : (firstTx.invoiceNo || 'N/A')}
                         </span>
                       </div>
                       <div className="w-px h-6 bg-slate-200" />
@@ -1361,6 +1397,9 @@ export default function Transactions() {
                             </th>
                             <th className="px-4 py-2 font-black">Item Name</th>
                             <th className="px-4 py-2 font-black">Category</th>
+                            {firstTx.type === 'FACTORY_IN' && (
+                              <th className="px-4 py-2 font-black">Shift</th>
+                            )}
                             <th className="px-4 py-2 font-black">Quantity</th>
                             <th className="px-4 py-2 font-black">Unit</th>
                             {firstTx.type === 'FACTORY_IN' && (
@@ -1390,7 +1429,12 @@ export default function Transactions() {
                                 <td className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                   {categories.find(c => c.id === item?.categoryId)?.name || 'General'}
                                 </td>
-                                <td className="px-4 py-3 text-xs font-black text-slate-900">{tx.quantity}</td>
+                                {tx.type === 'FACTORY_IN' && (
+                                  <td className="px-4 py-3 text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                                    {tx.shift || 'Day Shift'}
+                                  </td>
+                                )}
+                                <td className="px-4 py-3 text-xs font-black text-slate-900">{Number(tx.quantity) || 0}</td>
                                 <td className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item?.unit}</td>
                                 {tx.type === 'FACTORY_IN' && (
                                   <>
@@ -1455,37 +1499,20 @@ export default function Transactions() {
             </div>
 
             <form onSubmit={handleFactoryInSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Shift and Date Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-slate-50 p-5 rounded-3xl border border-slate-100">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Shift</label>
-                  <div className="flex gap-2">
-                    {['Day Shift', 'Night Shift'].map(shift => (
-                      <button
-                        key={shift}
-                        type="button"
-                        onClick={() => setFactoryInData({ ...factoryInData, shift })}
-                        className={`flex-1 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${
-                          factoryInData.shift === shift 
-                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20' 
-                            : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200'
-                        }`}
-                      >
-                        {shift}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
+              {/* Date Selection */}
+              <div className="grid grid-cols-1 gap-5 bg-slate-50 p-5 rounded-3xl border border-slate-100">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Production Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={factoryInData.date}
-                    onChange={(e) => setFactoryInData({ ...factoryInData, date: e.target.value })}
-                    className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
-                    required
-                  />
+                  <div className="relative">
+                    <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="datetime-local"
+                      value={factoryInData.date}
+                      onChange={(e) => setFactoryInData({ ...factoryInData, date: e.target.value })}
+                      className="w-full bg-white border-2 border-slate-200 rounded-2xl pl-12 pr-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1535,6 +1562,19 @@ export default function Transactions() {
                                 <option key={cat.id} value={cat.id}>{cat.name}</option>
                               ))
                             }
+                          </select>
+                        </div>
+
+                        <div className="lg:col-span-2 space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Shift</label>
+                          <select
+                            value={item.shift}
+                            onChange={(e) => updateFactoryInItem(index, 'shift', e.target.value)}
+                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                            required
+                          >
+                            <option value="Day Shift">Day Shift</option>
+                            <option value="Night Shift">Night Shift</option>
                           </select>
                         </div>
 
@@ -1703,9 +1743,10 @@ export default function Transactions() {
             >
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
                 {/* Header Info Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                  {modalType === 'FACTORY_IN' ? (
-                    <div className="sm:col-span-2 space-y-1.5">
+                <div className="grid grid-cols-1 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                  {/* Shift Selection - Visible for non-Factory In */}
+                  {modalType !== 'FACTORY_IN' && (
+                    <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Shift</label>
                       <div className="flex gap-2">
                         {['Day Shift', 'Night Shift'].map(shift => (
@@ -1724,8 +1765,10 @@ export default function Transactions() {
                         ))}
                       </div>
                     </div>
-                  ) : (
-                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {modalType !== 'FACTORY_IN' && (
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Invoice / PI No</label>
                         <input
@@ -1736,19 +1779,23 @@ export default function Transactions() {
                           placeholder="INV-001"
                         />
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date & Time</label>
-                        <div className="relative">
-                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                          <input
-                            type="datetime-local"
-                            required
-                            value={formData.date}
-                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                          />
-                        </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
+                        {modalType === 'FACTORY_IN' ? 'Production Date & Time' : 'Date & Time'}
+                      </label>
+                      <div className="relative">
+                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          type="datetime-local"
+                          required
+                          value={formData.date}
+                          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                        />
                       </div>
+                    </div>
+                    {modalType !== 'FACTORY_IN' && (
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Location</label>
                         <div className="relative">
@@ -1762,6 +1809,8 @@ export default function Transactions() {
                           />
                         </div>
                       </div>
+                    )}
+                    {modalType !== 'FACTORY_IN' && (
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Total Boxes</label>
                         <div className="relative">
@@ -1775,11 +1824,11 @@ export default function Transactions() {
                           />
                         </div>
                       </div>
-                    </div>
-                  )}
-                  
-                  {modalType !== 'FACTORY_IN' && (
-                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {modalType !== 'FACTORY_IN' && (
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
                           {modalType === 'IN' ? 'Supplier / Source' : 
@@ -1794,6 +1843,8 @@ export default function Transactions() {
                           placeholder="Entity Name"
                         />
                       </div>
+                    )}
+                    {modalType !== 'FACTORY_IN' && (
                       <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Sales Person</label>
                         <div className="relative">
@@ -1807,23 +1858,8 @@ export default function Transactions() {
                           />
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {modalType === 'FACTORY_IN' && (
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Production Date & Time</label>
-                      <div className="relative">
-                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                          type="datetime-local"
-                          required
-                          value={formData.date}
-                          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
-                        />
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* Items List */}
@@ -1958,6 +1994,17 @@ export default function Transactions() {
                                     className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
                                     placeholder="0"
                                   />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Shift</label>
+                                  <select
+                                    value={item.shift}
+                                    onChange={(e) => updateItemRow(index, 'shift', e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                                  >
+                                    <option value="Day Shift">Day Shift</option>
+                                    <option value="Night Shift">Night Shift</option>
+                                  </select>
                                 </div>
                                 <div className="flex-1">
                                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Good Parts</label>

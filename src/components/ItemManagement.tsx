@@ -110,7 +110,7 @@ export default function ItemManagement() {
         if (!isNaN(qty)) {
           if (tx.type === 'IN' || tx.type === 'FACTORY_IN') {
             runningBalance += qty;
-          } else if (tx.type === 'OUT') {
+          } else if (tx.type === 'OUT' || tx.type === 'SCHEDULED') {
             runningBalance -= qty;
           }
         }
