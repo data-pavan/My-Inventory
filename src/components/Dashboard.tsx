@@ -36,11 +36,12 @@ import {
   RefreshCw,
   X
 } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, writeBatch, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Item, Transaction, Category } from '../types';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths, isWithinInterval, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { toast } from 'react-hot-toast';
 
 export default function Dashboard({ setView }: { setView: (view: string) => void }) {
   const [items, setItems] = useState<Item[]>([]);
@@ -62,11 +63,35 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
 
   // Health Check State
   const [isHealthChecking, setIsHealthChecking] = useState(false);
+  const [isFixingHealth, setIsFixingHealth] = useState(false);
   const [healthResults, setHealthResults] = useState<{
     totalItems: number;
     discrepancyCount: number;
     itemsWithDiscrepancy: { item: Item, calculated: number, current: number }[];
   } | null>(null);
+
+  const fixDiscrepancies = async () => {
+    if (!healthResults || healthResults.discrepancyCount === 0) return;
+    
+    setIsFixingHealth(true);
+    const batch = writeBatch(db);
+    
+    try {
+      healthResults.itemsWithDiscrepancy.forEach(({ item, calculated }) => {
+        const itemRef = doc(db, 'items', item.id);
+        batch.update(itemRef, { currentStock: calculated });
+      });
+      
+      await batch.commit();
+      toast.success(`Successfully fixed ${healthResults.discrepancyCount} discrepancies!`);
+      setHealthResults(null);
+    } catch (error) {
+      console.error('Error fixing discrepancies:', error);
+      toast.error('Failed to fix discrepancies. Please try again.');
+    } finally {
+      setIsFixingHealth(false);
+    }
+  };
 
   const runHealthCheck = () => {
     setIsHealthChecking(true);
@@ -173,7 +198,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
 
       const periodTxs = transactions.filter(tx => {
         const txDate = new Date(tx.date);
-        return tx.type === 'IN' && isWithinInterval(txDate, { start, end });
+        return (tx.type === 'IN' || tx.type === 'FACTORY_IN') && isWithinInterval(txDate, { start, end });
       });
 
       const dataPoint: any = {
@@ -211,7 +236,9 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   const groupedRecentTransactions = useMemo(() => {
     const groups: { [key: string]: Transaction[] } = {};
     transactions.forEach(tx => {
-      const key = tx.invoiceNo || tx.voucherNo;
+      const key = tx.type === 'FACTORY_IN' 
+        ? `F-${format(new Date(tx.date), 'yyyy-MM-dd')}`
+        : (tx.invoiceNo || tx.voucherNo);
       if (!groups[key]) {
         groups[key] = [];
       }
@@ -271,7 +298,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
       return dateMatch && itemMatch;
     });
 
-    const inBreakdown = dayTxs.filter(tx => tx.type === 'IN').reduce((acc: any, tx) => {
+    const inBreakdown = dayTxs.filter(tx => tx.type === 'IN' || tx.type === 'FACTORY_IN').reduce((acc: any, tx) => {
       const itemName = items.find(i => i.id === tx.itemId)?.name || 'Unknown';
       acc[itemName] = (acc[itemName] || 0) + tx.quantity;
       return acc;
@@ -291,7 +318,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
 
     return {
       name: dayName,
-      in: dayTxs.filter(tx => tx.type === 'IN').reduce((acc, tx) => acc + tx.quantity, 0),
+      in: dayTxs.filter(tx => tx.type === 'IN' || tx.type === 'FACTORY_IN').reduce((acc, tx) => acc + tx.quantity, 0),
       out: dayTxs.filter(tx => tx.type === 'OUT').reduce((acc, tx) => acc + tx.quantity, 0),
       scheduled: dayTxs.filter(tx => tx.type === 'SCHEDULED').reduce((acc, tx) => acc + tx.quantity, 0),
       inBreakdown,
@@ -866,14 +893,23 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                     {/* Left Side - 30% Details Area */}
                     <div className="w-[30%] bg-slate-50/50 p-3 border-r border-slate-100 flex flex-col justify-between">
                       <div className="space-y-2">
-                        <div>
-                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PI / Invoice</p>
-                          <p className="text-[10px] font-black text-slate-900 truncate">{groupKey}</p>
-                        </div>
-                        <div>
-                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
-                          <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.salesPerson || 'N/A'}</p>
-                        </div>
+                        {firstTx.type === 'FACTORY_IN' ? (
+                          <div>
+                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Production Date</p>
+                            <p className="text-[10px] font-black text-slate-900 truncate">{format(new Date(firstTx.date), 'MMM d, yyyy')}</p>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PI / Invoice</p>
+                              <p className="text-[10px] font-black text-slate-900 truncate">{groupKey}</p>
+                            </div>
+                            <div>
+                              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                              <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.salesPerson || 'N/A'}</p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -918,28 +954,80 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
                   {/* Expanded Details */}
                   {isExpanded && (
                     <div className="bg-slate-50/30 p-3 space-y-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
-                      <div className="flex items-center gap-2 mb-2">
-                        <MapPin size={12} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight truncate">
-                          {firstTx.sourceDestination || 'N/A'}
-                        </span>
-                      </div>
-                      {groupTxs.map((tx) => {
-                        const item = items.find(i => i.id === tx.itemId);
-                        return (
-                          <div key={tx.id} className="bg-white border border-slate-100 rounded-xl p-2 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100">
-                                <Package size={12} className="text-slate-400" />
+                      {firstTx.type !== 'FACTORY_IN' && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <MapPin size={12} className="text-slate-400" />
+                          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight truncate">
+                            {firstTx.sourceDestination || 'N/A'}
+                          </span>
+                        </div>
+                      )}
+                      {(() => {
+                        if (firstTx.type !== 'FACTORY_IN') {
+                          return groupTxs.map((tx) => {
+                            const item = items.find(i => i.id === tx.itemId);
+                            return (
+                              <div key={tx.id} className="bg-white border border-slate-100 rounded-xl p-2 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100">
+                                    <Package size={12} className="text-slate-400" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="font-bold text-slate-900 text-[10px] truncate">{item?.name || 'Unknown Item'}</h4>
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">{tx.quantity} {item?.unit}</p>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <h4 className="font-bold text-slate-900 text-[10px] truncate">{item?.name || 'Unknown Item'}</h4>
-                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">{tx.quantity} {item?.unit}</p>
+                            );
+                          });
+                        }
+
+                        // Aggregate FACTORY_IN items by itemId
+                        const aggregated = groupTxs.reduce((acc, tx) => {
+                          const key = tx.itemId;
+                          if (!acc[key]) {
+                            acc[key] = { 
+                              itemId: tx.itemId, 
+                              quantity: tx.quantity, 
+                              shifts: tx.shift ? [tx.shift] : [],
+                              type: tx.type
+                            };
+                          } else {
+                            acc[key].quantity += tx.quantity;
+                            if (tx.shift && !acc[key].shifts.includes(tx.shift)) {
+                              acc[key].shifts.push(tx.shift);
+                            }
+                          }
+                          return acc;
+                        }, {} as Record<string, any>);
+
+                        return Object.values(aggregated).map((agg: any) => {
+                          const item = items.find(i => i.id === agg.itemId);
+                          return (
+                            <div key={agg.itemId} className="bg-white border border-slate-100 rounded-xl p-2 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100">
+                                  <Package size={12} className="text-slate-400" />
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="font-bold text-slate-900 text-[10px] truncate">{item?.name || 'Unknown Item'}</h4>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">{agg.quantity} {item?.unit}</p>
+                                    {agg.shifts.length > 0 && (
+                                      <>
+                                        <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                        <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest">{agg.shifts.join(' & ')}</p>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                       <button 
                         onClick={() => setView('transactions')}
                         className="w-full mt-2 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-blue-600 uppercase tracking-widest hover:bg-blue-50 transition-all"
@@ -1077,11 +1165,21 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
               </button>
               {healthResults.discrepancyCount > 0 && (
                 <button 
-                  onClick={() => setView('items')}
-                  className="flex-[2] px-6 py-4 rounded-2xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest flex items-center justify-center gap-2"
+                  onClick={fixDiscrepancies}
+                  disabled={isFixingHealth}
+                  className="flex-[2] px-6 py-4 rounded-2xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-600/20 uppercase tracking-widest flex items-center justify-center gap-2"
                 >
-                  <Package size={18} />
-                  <span>Go to Item Management to Fix</span>
+                  {isFixingHealth ? (
+                    <>
+                      <RefreshCw size={18} className="animate-spin" />
+                      <span>Fixing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={18} />
+                      <span>Fix All Discrepancies</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>

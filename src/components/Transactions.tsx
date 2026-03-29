@@ -1015,24 +1015,32 @@ export default function Transactions() {
                   <div className="flex min-h-[100px]">
                     {/* Left Side - 30% Details Area */}
                     <div className="w-[30%] bg-slate-50/80 p-3 border-r border-slate-100 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
-                            {firstTx.type === 'FACTORY_IN' ? 'Shift' : 'PI / Invoice'}
-                          </p>
-                          <p className="text-[10px] font-black text-slate-900 truncate">
-                            {firstTx.type === 'FACTORY_IN' ? (firstTx.shift || 'Day Shift') : (firstTx.invoiceNo || 'N/A')}
-                          </p>
+                      {firstTx.type === 'FACTORY_IN' ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                          <Plus size={20} className="text-indigo-400 mb-1" />
+                          <p className="text-[8px] font-black text-indigo-600 uppercase tracking-widest">Production</p>
+                          <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">Summary</p>
                         </div>
-                        <div>
-                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
-                          <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.salesPerson || 'N/A'}</p>
+                      ) : (
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
+                              PI / Invoice
+                            </p>
+                            <p className="text-[10px] font-black text-slate-900 truncate">
+                              {firstTx.invoiceNo || 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                            <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.salesPerson || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Destination</p>
+                            <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.sourceDestination || 'N/A'}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Destination</p>
-                          <p className="text-[10px] font-bold text-slate-600 truncate">{firstTx.sourceDestination || 'N/A'}</p>
-                        </div>
-                      </div>
+                      )}
                       
                       {group.some(t => t.type === 'SCHEDULED') && (
                         <button 
@@ -1080,7 +1088,7 @@ export default function Transactions() {
 
                       <div className="mt-2 flex items-end justify-between">
                         <div className="space-y-1">
-                          {firstTx.type !== 'FACTORY_IN' && (
+                          {firstTx.type !== 'FACTORY_IN' ? (
                             <>
                               <div className="flex items-center gap-1">
                                 <Clock size={10} className="text-slate-400 shrink-0" />
@@ -1095,6 +1103,13 @@ export default function Transactions() {
                                 </p>
                               </div>
                             </>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Package size={10} className="text-indigo-400 shrink-0" />
+                              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                                {group.length} {group.length === 1 ? 'Item' : 'Items'} Produced
+                              </p>
+                            </div>
                           )}
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] font-bold text-slate-400">
