@@ -1342,30 +1342,32 @@ export default function Transactions() {
                         Dispatch PI
                       </button>
                     )}
-                    <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                      <div className="flex flex-col">
-                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
-                          {firstTx.type === 'FACTORY_IN' ? 'Shift' : 'PI / Invoice'}
-                        </p>
-                        <span className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
-                          {firstTx.type === 'FACTORY_IN' ? (firstTx.shift || 'Day Shift') : (firstTx.invoiceNo || 'N/A')}
-                        </span>
+                    {firstTx.type !== 'FACTORY_IN' && (
+                      <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                        <div className="flex flex-col">
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
+                            PI / Invoice
+                          </p>
+                          <span className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
+                            {firstTx.invoiceNo || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="w-px h-6 bg-slate-200" />
+                        <div className="flex flex-col">
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
+                          <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                            <UserIcon size={12} className="text-slate-400" /> {firstTx.salesPerson || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="w-px h-6 bg-slate-200" />
+                        <div className="flex flex-col">
+                          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Destination</p>
+                          <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                            <MapPin size={12} className="text-slate-400" /> {firstTx.sourceDestination || 'N/A'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="w-px h-6 bg-slate-200" />
-                      <div className="flex flex-col">
-                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sales Person</p>
-                        <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
-                          <UserIcon size={12} className="text-slate-400" /> {firstTx.salesPerson || 'N/A'}
-                        </span>
-                      </div>
-                      <div className="w-px h-6 bg-slate-200" />
-                      <div className="flex flex-col">
-                        <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Destination</p>
-                        <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
-                          <MapPin size={12} className="text-slate-400" /> {firstTx.sourceDestination || 'N/A'}
-                        </span>
-                      </div>
-                    </div>
+                    )}
                     <div className="text-slate-400">
                       {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                     </div>
