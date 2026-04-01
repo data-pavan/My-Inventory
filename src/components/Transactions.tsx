@@ -444,8 +444,8 @@ export default function Transactions() {
     setIsModalOpen(true);
   };
 
-  const openPIDispatchModal = (invoiceNo: string) => {
-    const relatedTxs = transactions.filter(t => t.invoiceNo === invoiceNo && t.type === 'SCHEDULED');
+  const openPIDispatchModal = (voucherNo: string) => {
+    const relatedTxs = transactions.filter(t => t.voucherNo === voucherNo && t.type === 'SCHEDULED');
     if (relatedTxs.length === 0) return;
     
     const firstTx = relatedTxs[0];
