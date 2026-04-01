@@ -24,6 +24,7 @@
 //   - initialStock: number (required)
 //   - currentStock: number (required)
 //   - scheduledStock: number (optional)
+//   - isStockable: bool (optional)
 //
 // Collection: transactions
 // Document ID: transactionId
@@ -31,11 +32,19 @@
 //   - voucherNo: string (required)
 //   - invoiceNo: string (optional)
 //   - date: string (required, ISO 8601)
-//   - type: string (required, ['IN', 'OUT', 'SCHEDULED'])
+//   - type: string (required, ['IN', 'OUT', 'SCHEDULED', 'FACTORY_IN'])
 //   - itemId: string (required)
 //   - quantity: number (required, positive)
 //   - sourceDestination: string (optional)
 //   - location: string (optional)
+//   - salesPerson: string (optional)
+//   - totalBoxes: number (optional)
+//   - fromScheduled: bool (optional)
+//   - production: number (optional)
+//   - rejected: number (optional)
+//   - shift: string (optional)
+//   - lrNo: string (optional)
+//   - deliveryPartner: string (optional)
 //   - createdBy: string (required)
 //   - creatorEmail: string (required)
 //   - creatorRole: string (required)
@@ -63,6 +72,7 @@ service cloud.firestore {
         (request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co", "general@inventorypro.app"] ||
          request.auth.token.get('email', '') in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co", "general@inventorypro.app"] ||
          request.auth.uid == "EtTxydwOeIgqb7GcwoVPGECwA5s2" ||
+         request.auth.uid == "bO7IEhfIcOUwZw2owvCZvK6Q8qh2" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin'));
     }
@@ -100,13 +110,15 @@ service cloud.firestore {
     }
 
     function isValidItem(data) {
-      return data.get('name', '') is string && 
+      return hasOnlyAllowedFields(['name', 'categoryId', 'unit', 'minStock', 'initialStock', 'currentStock', 'scheduledStock', 'isStockable']) &&
+             data.get('name', '') is string && 
              data.get('categoryId', '') is string &&
              data.get('unit', '') is string &&
              data.get('minStock', 0) is number &&
              data.get('currentStock', 0) is number &&
              data.get('initialStock', 0) is number &&
-             (!('scheduledStock' in data) || data.get('scheduledStock', 0) is number);
+             (!('scheduledStock' in data) || data.get('scheduledStock', 0) is number) &&
+             (!('isStockable' in data) || data.get('isStockable', true) is bool);
     }
 
     function isValidTransaction(data) {
@@ -118,11 +130,17 @@ service cloud.firestore {
              data.get('createdBy', '') == request.auth.uid &&
              data.get('creatorEmail', '') is string &&
              data.get('creatorRole', '') in ['admin', 'staff'] &&
+             (!('salesPerson' in data) || data.get('salesPerson', '') is string) &&
              (!('totalBoxes' in data) || data.get('totalBoxes', 0) is number) &&
              (!('fromScheduled' in data) || data.get('fromScheduled', false) is bool) &&
              (!('production' in data) || data.get('production', 0) is number) &&
              (!('rejected' in data) || data.get('rejected', 0) is number) &&
-             (!('shift' in data) || data.get('shift', '') is string);
+             (!('shift' in data) || data.get('shift', '') is string) &&
+             (!('lrNo' in data) || data.get('lrNo', '') is string) &&
+             (!('deliveryPartner' in data) || data.get('deliveryPartner', '') is string) &&
+             (!('sourceDestination' in data) || data.get('sourceDestination', '') is string) &&
+             (!('location' in data) || data.get('location', '') is string) &&
+             (!('invoiceNo' in data) || data.get('invoiceNo', '') is string);
     }
 
     // ===============================================================
@@ -133,7 +151,7 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
         (request.resource.data.role == 'staff' || 
-         (request.resource.data.role == 'admin' && request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co"]) ||
+         (request.resource.data.role == 'admin' && request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co", "general@inventorypro.app"]) ||
          isAdmin());
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
         ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());

@@ -54,11 +54,14 @@ export default function StockTable() {
   const rangeEnd = endOfDay(parseISO(dateRange.end)).getTime();
 
   const filteredItems = items.filter(item => {
+    const category = categories.find(c => c.id === item.categoryId);
+    const isStockable = item.isStockable !== false;
+    
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategories.length === 0 || filterCategories.includes(item.categoryId);
     const isLow = item.currentStock <= item.minStock;
     const matchesStatus = filterStatus === 'ALL' || (filterStatus === 'LOW' ? isLow : !isLow);
-    return matchesSearch && matchesCategory && matchesStatus;
+    return isStockable && matchesSearch && matchesCategory && matchesStatus;
   }).sort((a, b) => {
     const catA = categories.find(c => c.id === a.categoryId)?.name || '';
     const catB = categories.find(c => c.id === b.categoryId)?.name || '';
@@ -69,17 +72,23 @@ export default function StockTable() {
   });
 
   const globalStats = {
-    totalStock: items.reduce((acc, item) => acc + item.currentStock, 0),
+    totalStock: items.filter(item => {
+      return item.isStockable !== false;
+    }).reduce((acc, item) => acc + item.currentStock, 0),
     stockIn: transactions
       .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
       .reduce((acc, tx) => acc + tx.quantity, 0),
     stockOut: transactions
       .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
       .reduce((acc, tx) => acc + tx.quantity, 0),
-    lowStockCount: items.filter(item => item.currentStock <= item.minStock).length
+    lowStockCount: items.filter(item => {
+      return item.isStockable !== false && item.currentStock <= item.minStock;
+    }).length
   };
 
-  const lowStockCount = items.filter(item => item.currentStock <= item.minStock).length;
+  const lowStockCount = items.filter(item => {
+    return item.isStockable !== false && item.currentStock <= item.minStock;
+  }).length;
 
   const toggleSelectItem = (id: string) => {
     setSelectedItemIds(prev => 
@@ -99,6 +108,9 @@ export default function StockTable() {
     const itemsToExport = (selectedItemIds.length > 0 
       ? items.filter(i => selectedItemIds.includes(i.id))
       : filteredItems)
+      .filter(item => {
+        return item.isStockable !== false;
+      })
       .sort((a, b) => {
         const catA = categories.find(c => c.id === a.categoryId)?.name || '';
         const catB = categories.find(c => c.id === b.categoryId)?.name || '';

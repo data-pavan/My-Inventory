@@ -35,7 +35,8 @@ import {
   AlertTriangle,
   Edit2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Truck
 } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -79,6 +80,9 @@ export default function Transactions() {
     location: '',
     salesPerson: '',
     totalBoxes: 0,
+    lrNo: '',
+    deliveryPartner: '',
+    customDeliveryPartner: '',
     shift: 'Day Shift',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
@@ -232,6 +236,9 @@ export default function Transactions() {
               location: formData.location,
               salesPerson: formData.salesPerson,
               totalBoxes: formData.totalBoxes,
+              lrNo: formData.lrNo || '',
+              deliveryPartner: formData.deliveryPartner || '',
+              customDeliveryPartner: formData.customDeliveryPartner || '',
               date: new Date(formData.date).toISOString(),
               type: modalType,
               fromScheduled: entry.fromScheduled,
@@ -248,6 +255,9 @@ export default function Transactions() {
               location: formData.location,
               salesPerson: formData.salesPerson,
               totalBoxes: formData.totalBoxes,
+              lrNo: formData.lrNo || '',
+              deliveryPartner: formData.deliveryPartner || '',
+              customDeliveryPartner: formData.customDeliveryPartner || '',
               voucherNo,
               type: modalType,
               createdBy: auth.currentUser?.uid,
@@ -413,6 +423,9 @@ export default function Transactions() {
         location: tx.location || '',
         salesPerson: tx.salesPerson || '',
         totalBoxes: tx.totalBoxes || 0,
+        lrNo: tx.lrNo || '',
+        deliveryPartner: tx.deliveryPartner || '',
+        customDeliveryPartner: tx.customDeliveryPartner || '',
         shift: tx.shift || 'Day Shift',
         date: (type === 'OUT' && tx.type === 'SCHEDULED') 
           ? format(new Date(), "yyyy-MM-dd'T'HH:mm") 
@@ -436,6 +449,9 @@ export default function Transactions() {
         location: '',
         salesPerson: '',
         totalBoxes: 0,
+        lrNo: '',
+        deliveryPartner: '',
+        customDeliveryPartner: '',
         shift: 'Day Shift',
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
@@ -457,6 +473,9 @@ export default function Transactions() {
       location: firstTx.location || '',
       salesPerson: firstTx.salesPerson || '',
       totalBoxes: firstTx.totalBoxes || 0,
+      lrNo: '',
+      deliveryPartner: '',
+      customDeliveryPartner: '',
       shift: firstTx.shift || 'Day Shift',
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
       items: relatedTxs.map(t => {
@@ -1164,6 +1183,18 @@ export default function Transactions() {
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Boxes</p>
                             <p className="text-[10px] font-bold text-slate-700">{firstTx.totalBoxes || 0}</p>
                           </div>
+                          {firstTx.lrNo && (
+                            <div>
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">LR No.</p>
+                              <p className="text-[10px] font-bold text-slate-700">{firstTx.lrNo}</p>
+                            </div>
+                          )}
+                          {firstTx.deliveryPartner && (
+                            <div>
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Partner</p>
+                              <p className="text-[10px] font-bold text-slate-700">{firstTx.deliveryPartner === 'Others' ? firstTx.customDeliveryPartner : firstTx.deliveryPartner}</p>
+                            </div>
+                          )}
                         </>
                       )}
                       <div className="sm:col-span-2 lg:col-span-1">
@@ -1381,6 +1412,24 @@ export default function Transactions() {
                             <MapPin size={12} className="text-slate-400" /> {firstTx.sourceDestination || 'N/A'}
                           </span>
                         </div>
+                        {firstTx.lrNo && (
+                          <>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <div className="flex flex-col">
+                              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">LR No.</p>
+                              <span className="text-[10px] font-bold text-slate-600">{firstTx.lrNo}</span>
+                            </div>
+                          </>
+                        )}
+                        {firstTx.deliveryPartner && (
+                          <>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <div className="flex flex-col">
+                              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Partner</p>
+                              <span className="text-[10px] font-bold text-slate-600">{firstTx.deliveryPartner === 'Others' ? firstTx.customDeliveryPartner : firstTx.deliveryPartner}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                     <div className="text-slate-400">
@@ -1877,6 +1926,87 @@ export default function Transactions() {
                       </div>
                     )}
                   </div>
+
+                  {modalType === 'OUT' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">LR No.</label>
+                        <div className="relative group">
+                          <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
+                          <input
+                            type="text"
+                            value={formData.lrNo}
+                            onChange={(e) => setFormData({ ...formData, lrNo: e.target.value })}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                            placeholder="LR-12345 (Optional)"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Delivery Partner</label>
+                        <Select
+                          value={formData.deliveryPartner ? { value: formData.deliveryPartner, label: formData.deliveryPartner } : null}
+                          onChange={(option) => setFormData({ ...formData, deliveryPartner: option ? option.value : '', customDeliveryPartner: option?.value === 'Others' ? formData.customDeliveryPartner : '' })}
+                          options={[
+                            { value: 'Delivery One', label: 'Delivery One' },
+                            { value: 'Porter', label: 'Porter' },
+                            { value: 'Trackon', label: 'Trackon' },
+                            { value: 'Nitco Logistics', label: 'Nitco Logistics' },
+                            { value: 'Client Transportation', label: 'Client Transportation' },
+                            { value: 'Others', label: 'Others' }
+                          ]}
+                          placeholder="Select Partner (Optional)"
+                          isSearchable={true}
+                          isClearable={true}
+                          className="react-select-container"
+                          classNamePrefix="react-select"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              backgroundColor: 'white',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '0.75rem',
+                              padding: '0.125rem 0.25rem',
+                              fontSize: '0.875rem',
+                              fontWeight: '700',
+                              boxShadow: 'none',
+                              '&:hover': {
+                                borderColor: '#3b82f6'
+                              }
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              borderRadius: '0.75rem',
+                              overflow: 'hidden',
+                              zIndex: 50
+                            }),
+                            option: (base, state) => ({
+                              ...base,
+                              backgroundColor: state.isSelected ? '#3b82f6' : state.isFocused ? '#f1f5f9' : 'white',
+                              color: state.isSelected ? 'white' : '#1e293b',
+                              fontWeight: '700',
+                              fontSize: '0.875rem'
+                            })
+                          }}
+                        />
+                      </div>
+                      {formData.deliveryPartner === 'Others' && (
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Specify Other Partner</label>
+                          <div className="relative group">
+                            <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
+                            <input
+                              type="text"
+                              value={formData.customDeliveryPartner}
+                              onChange={(e) => setFormData({ ...formData, customDeliveryPartner: e.target.value })}
+                              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                              placeholder="Enter partner name"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Items List */}

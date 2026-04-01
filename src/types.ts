@@ -15,6 +15,7 @@ export interface Item {
   initialStock: number;
   currentStock: number;
   scheduledStock: number;
+  isStockable?: boolean;
 }
 
 export interface Transaction {
@@ -36,6 +37,9 @@ export interface Transaction {
   production?: number;
   rejected?: number;
   shift?: string;
+  lrNo?: string;
+  deliveryPartner?: string;
+  customDeliveryPartner?: string;
 }
 
 export interface UserProfile {

@@ -52,7 +52,10 @@ export default function CategoryManagement() {
   const openModal = (category?: Category) => {
     if (category) {
       setEditingCategory(category);
-      setFormData({ name: category.name, description: category.description || '' });
+      setFormData({ 
+        name: category.name, 
+        description: category.description || ''
+      });
     } else {
       setEditingCategory(null);
       setFormData({ name: '', description: '' });

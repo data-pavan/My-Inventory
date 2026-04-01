@@ -18,7 +18,8 @@ export default function ItemManagement() {
     minStock: 10,
     initialStock: 0,
     currentStock: 0,
-    scheduledStock: 0
+    scheduledStock: 0,
+    isStockable: true
   });
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -158,7 +159,8 @@ export default function ItemManagement() {
         minStock: item.minStock,
         initialStock: item.initialStock || 0,
         currentStock: item.currentStock,
-        scheduledStock: item.scheduledStock || 0
+        scheduledStock: item.scheduledStock || 0,
+        isStockable: item.isStockable !== undefined ? item.isStockable : true
       });
     } else {
       setEditingItem(null);
@@ -169,7 +171,8 @@ export default function ItemManagement() {
         minStock: 10,
         initialStock: 0,
         currentStock: 0,
-        scheduledStock: 0
+        scheduledStock: 0,
+        isStockable: true
       });
     }
     setIsModalOpen(true);
@@ -639,10 +642,22 @@ export default function ItemManagement() {
                       required
                       min="0"
                       value={formData.initialStock}
+                      disabled={!formData.isStockable}
                       onChange={(e) => setFormData({ ...formData, initialStock: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white outline-none transition-all font-bold text-slate-900"
+                      className={`w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white outline-none transition-all font-bold text-slate-900 ${!formData.isStockable ? 'opacity-50 cursor-not-allowed' : ''}`}
                     />
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <input
+                    type="checkbox"
+                    id="isStockable"
+                    checked={formData.isStockable}
+                    onChange={(e) => setFormData({ ...formData, isStockable: e.target.checked })}
+                    className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="isStockable" className="text-sm font-bold text-slate-700">This is a stockable product</label>
                 </div>
               </div>
 

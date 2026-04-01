@@ -58,7 +58,7 @@ export default function Layout({ children, currentView, setView }: LayoutProps) 
             <Package size={20} />
           </div>
           {!isSidebarCollapsed && (
-            <span className="text-lg font-bold tracking-tight truncate">Inventory Pro</span>
+            <span className="text-lg font-bold tracking-tight truncate">Bharat Natural Elements</span>
           )}
         </div>
         
@@ -119,7 +119,7 @@ export default function Layout({ children, currentView, setView }: LayoutProps) 
             <div className="bg-blue-600 p-2 rounded-lg">
               <Package size={24} />
             </div>
-            <span className="text-xl font-bold">Inventory Pro</span>
+            <span className="text-xl font-bold">Bharat Natural Elements</span>
           </div>
           <button onClick={() => setIsSidebarOpen(false)}>
             <X size={24} />

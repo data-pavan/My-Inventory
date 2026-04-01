@@ -95,7 +95,7 @@ export default function Login() {
           <div className="bg-blue-600 p-3 rounded-xl mb-4">
             <Package className="text-white w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Inventory Pro</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Bharat Natural Elements</h1>
           <p className="text-slate-500">Manage your stock with ease</p>
         </div>
 
