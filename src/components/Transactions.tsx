@@ -72,6 +72,8 @@ export default function Transactions() {
 
   const [pin, setPin] = useState('');
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
+  const [pinPurpose, setPinPurpose] = useState<'DELETE' | 'SHOW_ALL'>('DELETE');
   const DELETE_PIN = '202603';
 
   const [formData, setFormData] = useState({
@@ -83,6 +85,8 @@ export default function Transactions() {
     lrNo: '',
     deliveryPartner: '',
     customDeliveryPartner: '',
+    paymentConfirmation: '',
+    customPaymentConfirmation: '',
     shift: 'Day Shift',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
@@ -239,6 +243,8 @@ export default function Transactions() {
               lrNo: formData.lrNo || '',
               deliveryPartner: formData.deliveryPartner || '',
               customDeliveryPartner: formData.customDeliveryPartner || '',
+              paymentConfirmation: formData.paymentConfirmation || '',
+              customPaymentConfirmation: formData.customPaymentConfirmation || '',
               date: new Date(formData.date).toISOString(),
               type: modalType,
               fromScheduled: entry.fromScheduled,
@@ -258,6 +264,8 @@ export default function Transactions() {
               lrNo: formData.lrNo || '',
               deliveryPartner: formData.deliveryPartner || '',
               customDeliveryPartner: formData.customDeliveryPartner || '',
+              paymentConfirmation: formData.paymentConfirmation || '',
+              customPaymentConfirmation: formData.customPaymentConfirmation || '',
               voucherNo,
               type: modalType,
               createdBy: auth.currentUser?.uid,
@@ -426,6 +434,8 @@ export default function Transactions() {
         lrNo: tx.lrNo || '',
         deliveryPartner: tx.deliveryPartner || '',
         customDeliveryPartner: tx.customDeliveryPartner || '',
+        paymentConfirmation: tx.paymentConfirmation || '',
+        customPaymentConfirmation: tx.customPaymentConfirmation || '',
         shift: tx.shift || 'Day Shift',
         date: (type === 'OUT' && tx.type === 'SCHEDULED') 
           ? format(new Date(), "yyyy-MM-dd'T'HH:mm") 
@@ -452,6 +462,8 @@ export default function Transactions() {
         lrNo: '',
         deliveryPartner: '',
         customDeliveryPartner: '',
+        paymentConfirmation: '',
+        customPaymentConfirmation: '',
         shift: 'Day Shift',
         date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         items: [{ categoryId: 'ALL', itemId: '', quantity: 1, fromScheduled: false, originalTxId: '', production: 0, rejected: 0, shift: 'Day Shift' }]
@@ -476,6 +488,8 @@ export default function Transactions() {
       lrNo: '',
       deliveryPartner: '',
       customDeliveryPartner: '',
+      paymentConfirmation: '',
+      customPaymentConfirmation: '',
       shift: firstTx.shift || 'Day Shift',
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
       items: relatedTxs.map(t => {
@@ -577,9 +591,18 @@ export default function Transactions() {
     );
   };
   
-  const executeDelete = async () => {
-    if (!confirmAction) return;
+  const executePinAction = async () => {
     if (pin !== DELETE_PIN) return toast.error('Invalid PIN');
+    
+    if (pinPurpose === 'SHOW_ALL') {
+      setShowAllTransactions(true);
+      setPin('');
+      setIsPinModalOpen(false);
+      toast.success('All transactions are now visible');
+      return;
+    }
+
+    if (!confirmAction) return;
     
     const toastId = toast.loading('Processing deletion...');
     setLoading(true);
@@ -656,6 +679,7 @@ export default function Transactions() {
   };
 
   const initiateDelete = (type: 'DELETE' | 'BULK_DELETE' | 'PI_DELETE', data: any) => {
+    setPinPurpose('DELETE');
     setConfirmAction({
       type,
       ...data
@@ -663,8 +687,25 @@ export default function Transactions() {
     setIsPinModalOpen(true);
   };
 
+  const initiateShowAll = () => {
+    setPinPurpose('SHOW_ALL');
+    setIsPinModalOpen(true);
+  };
+
+  const isTileCategory = (catName: string) => {
+    return ['PP Tiles', 'Soft Tiles', 'Kerbs Male', 'Kerbs Female', 'Corner'].includes(catName);
+  };
+
   const filteredTransactions = transactions.filter(tx => {
     const item = items.find(i => i.id === tx.itemId);
+    const category = categories.find(c => c.id === item?.categoryId);
+    
+    // Check if it's a tile transaction
+    const isTile = category ? isTileCategory(category.name) : false;
+    
+    // If not showing all, hide non-tiles
+    if (!showAllTransactions && !isTile) return false;
+
     const matchesSearch = item?.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          tx.voucherNo.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -796,7 +837,8 @@ export default function Transactions() {
         'Created By': createdByDisplay,
         'Source/Destination': tx.sourceDestination || '-',
         'Location': tx.location || '-',
-        'Total Boxes': tx.totalBoxes || 0
+        'Total Boxes': tx.totalBoxes || 0,
+        'Payment Confirmation': tx.paymentConfirmation === 'others' ? tx.customPaymentConfirmation : tx.paymentConfirmation || '-'
       };
     });
 
@@ -922,6 +964,15 @@ export default function Transactions() {
           </div>
           
           <div className="md:col-span-5 flex gap-2">
+            {!showAllTransactions && (
+              <button
+                onClick={initiateShowAll}
+                className="flex-1 flex items-center justify-center gap-2 bg-slate-100 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-200 transition-all"
+              >
+                <Search size={18} />
+                <span>Show All</span>
+              </button>
+            )}
             <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
               <Filter size={18} className="text-slate-400" />
               <select 
@@ -1195,6 +1246,12 @@ export default function Transactions() {
                               <p className="text-[10px] font-bold text-slate-700">{firstTx.deliveryPartner === 'Others' ? firstTx.customDeliveryPartner : firstTx.deliveryPartner}</p>
                             </div>
                           )}
+                          {firstTx.paymentConfirmation && (
+                            <div>
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Payment</p>
+                              <p className="text-[10px] font-bold text-slate-700">{firstTx.paymentConfirmation === 'others' ? firstTx.customPaymentConfirmation : firstTx.paymentConfirmation}</p>
+                            </div>
+                          )}
                         </>
                       )}
                       <div className="sm:col-span-2 lg:col-span-1">
@@ -1427,6 +1484,15 @@ export default function Transactions() {
                             <div className="flex flex-col">
                               <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Partner</p>
                               <span className="text-[10px] font-bold text-slate-600">{firstTx.deliveryPartner === 'Others' ? firstTx.customDeliveryPartner : firstTx.deliveryPartner}</span>
+                            </div>
+                          </>
+                        )}
+                        {firstTx.paymentConfirmation && (
+                          <>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <div className="flex flex-col">
+                              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Payment</p>
+                              <span className="text-[10px] font-bold text-slate-600">{firstTx.paymentConfirmation === 'others' ? firstTx.customPaymentConfirmation : firstTx.paymentConfirmation}</span>
                             </div>
                           </>
                         )}
@@ -2007,6 +2073,68 @@ export default function Transactions() {
                       )}
                     </div>
                   )}
+
+                  {modalType === 'OUT' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Payment Confirmation</label>
+                        <Select
+                          value={formData.paymentConfirmation ? { value: formData.paymentConfirmation, label: formData.paymentConfirmation === 'others' ? 'Others' : formData.paymentConfirmation } : null}
+                          onChange={(option) => setFormData({ ...formData, paymentConfirmation: option ? option.value : '', customPaymentConfirmation: option?.value === 'others' ? formData.customPaymentConfirmation : '' })}
+                          options={[
+                            { value: 'Payment done', label: 'Payment done' },
+                            { value: 'Payment will be done after delivery', label: 'Payment will be done after delivery' },
+                            { value: 'others', label: 'Others' }
+                          ]}
+                          placeholder="Select Status"
+                          isSearchable={false}
+                          isClearable={true}
+                          className="react-select-container"
+                          classNamePrefix="react-select"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              backgroundColor: 'white',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '0.75rem',
+                              padding: '0.125rem 0.25rem',
+                              fontSize: '0.875rem',
+                              fontWeight: '700',
+                              boxShadow: 'none',
+                              '&:hover': {
+                                borderColor: '#3b82f6'
+                              }
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              borderRadius: '0.75rem',
+                              overflow: 'hidden',
+                              zIndex: 50
+                            }),
+                            option: (base, state) => ({
+                              ...base,
+                              backgroundColor: state.isSelected ? '#3b82f6' : state.isFocused ? '#f1f5f9' : 'white',
+                              color: state.isSelected ? 'white' : '#1e293b',
+                              fontWeight: '700',
+                              fontSize: '0.875rem'
+                            })
+                          }}
+                        />
+                      </div>
+                      {formData.paymentConfirmation === 'others' && (
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Specify Payment Status</label>
+                          <input
+                            type="text"
+                            value={formData.customPaymentConfirmation}
+                            onChange={(e) => setFormData({ ...formData, customPaymentConfirmation: e.target.value })}
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                            placeholder="Enter payment status"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Items List */}
@@ -2437,22 +2565,28 @@ export default function Transactions() {
                 <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
                   <AlertTriangle size={20} />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">Confirm Deletion</h3>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {pinPurpose === 'SHOW_ALL' ? 'Show All Transactions' : 'Security Verification'}
+                </h3>
               </div>
-              <button onClick={() => setIsPinModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setIsPinModalOpen(false); setPin(''); }} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-slate-600">
-                {confirmAction?.type === 'BULK_DELETE' ? `Are you sure you want to delete ${confirmAction.txIds?.length} selected transactions?` :
-                 confirmAction?.type === 'PI_DELETE' ? `Are you sure you want to delete all transactions for PI: ${confirmAction.invoiceNo}?` :
-                 'Are you sure you want to delete this transaction?'}
-                <br />
-                <span className="font-bold text-rose-600">This action cannot be undone and stock will be adjusted.</span>
+                {pinPurpose === 'SHOW_ALL' ? 'Enter the secret code to view non-tile transactions.' : (
+                  <>
+                    {confirmAction?.type === 'BULK_DELETE' ? `Are you sure you want to delete ${confirmAction.txIds?.length} selected transactions?` :
+                     confirmAction?.type === 'PI_DELETE' ? `Are you sure you want to delete all transactions for PI: ${confirmAction.invoiceNo}?` :
+                     'Are you sure you want to delete this transaction?'}
+                    <br />
+                    <span className="font-bold text-rose-600">This action cannot be undone and stock will be adjusted.</span>
+                  </>
+                )}
               </p>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Enter PIN to Confirm</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Enter Secret Code</label>
                 <input
                   type="password"
                   value={pin}
@@ -2461,21 +2595,22 @@ export default function Transactions() {
                   placeholder="••••••"
                   maxLength={6}
                   autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && executePinAction()}
                 />
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={() => setIsPinModalOpen(false)}
+                  onClick={() => { setIsPinModalOpen(false); setPin(''); }}
                   className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={executeDelete}
+                  onClick={executePinAction}
                   disabled={loading || pin.length < 6}
                   className="flex-1 bg-rose-600 text-white font-semibold py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Processing...' : 'Delete Now'}
+                  {loading ? 'Processing...' : pinPurpose === 'SHOW_ALL' ? 'Unlock' : 'Delete Now'}
                 </button>
               </div>
             </div>

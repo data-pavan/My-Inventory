@@ -159,7 +159,8 @@ service cloud.firestore {
 
     match /categories/{categoryId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() && isValidCategory(request.resource.data);
+      allow create, update: if isAdmin() && isValidCategory(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /items/{itemId} {

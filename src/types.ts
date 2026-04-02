@@ -40,6 +40,8 @@ export interface Transaction {
   lrNo?: string;
   deliveryPartner?: string;
   customDeliveryPartner?: string;
+  paymentConfirmation?: string;
+  customPaymentConfirmation?: string;
 }
 
 export interface UserProfile {

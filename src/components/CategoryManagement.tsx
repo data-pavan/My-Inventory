@@ -13,12 +13,51 @@ export default function CategoryManagement() {
   const [formData, setFormData] = useState({ name: '', description: '' });
   const [loading, setLoading] = useState(false);
 
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [items, setItems] = useState<any[]>([]);
+
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'categories'), (snap) => {
+    const unsubCat = onSnapshot(collection(db, 'categories'), (snap) => {
       setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
     });
-    return () => unsub();
+    const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
+      setItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => {
+      unsubCat();
+      unsubItems();
+    };
   }, []);
+
+  const handleDelete = async () => {
+    if (!categoryToDelete) return;
+    
+    const hasItems = items.some(item => item.categoryId === categoryToDelete);
+    if (hasItems) {
+      toast.error('Cannot delete category because it has items assigned to it.');
+      setIsDeleteModalOpen(false);
+      setCategoryToDelete(null);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, 'categories', categoryToDelete));
+      toast.success('Category deleted successfully');
+      setIsDeleteModalOpen(false);
+      setCategoryToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'categories');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const initiateDelete = (id: string) => {
+    setCategoryToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,16 +75,6 @@ export default function CategoryManagement() {
       handleFirestoreError(error, editingCategory ? OperationType.UPDATE : OperationType.CREATE, 'categories');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this category?')) return;
-    try {
-      await deleteDoc(doc(db, 'categories', id));
-      toast.success('Category deleted successfully');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'categories');
     }
   };
 
@@ -104,7 +133,7 @@ export default function CategoryManagement() {
                     <Edit2 size={18} />
                   </button>
                   <button 
-                    onClick={() => handleDelete(cat.id)}
+                    onClick={() => initiateDelete(cat.id)}
                     className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                   >
                     <Trash2 size={18} />
@@ -141,7 +170,7 @@ export default function CategoryManagement() {
                       <Edit2 size={16} />
                     </button>
                     <button 
-                      onClick={() => handleDelete(cat.id)}
+                      onClick={() => initiateDelete(cat.id)}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                     >
                       <Trash2 size={16} />
@@ -214,6 +243,48 @@ export default function CategoryManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 bg-rose-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-rose-600 text-white rounded-lg">
+                  <Trash2 size={24} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900">Delete Category</h3>
+              </div>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600">
+                Are you sure you want to delete this category? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className="flex-1 bg-rose-600 text-white font-semibold py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  {loading ? (
+                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
