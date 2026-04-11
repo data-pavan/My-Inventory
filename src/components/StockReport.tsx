@@ -46,12 +46,21 @@ const getColorByName = (name: string) => {
   const lowerName = name.toLowerCase();
   if (lowerName.includes('red')) return '#EF4444';
   if (lowerName.includes('green')) return '#10B981';
+  
+  // Sky Blue vs Deep Blue
+  if (lowerName.includes('sky blue')) return '#38BDF8'; 
   if (lowerName.includes('blue')) return '#2563EB';
+  
   if (lowerName.includes('yellow')) return '#F59E0B';
   if (lowerName.includes('orange')) return '#F97316';
+  
+  // Differentiating Light and Dark Grey - Made Light Grey slightly darker for visibility
+  if (lowerName.includes('light grey') || lowerName.includes('light gray')) return '#D1D5DB';
+  if (lowerName.includes('dark grey') || lowerName.includes('dark gray')) return '#1E293B';
   if (lowerName.includes('grey') || lowerName.includes('gray')) return '#64748B';
+  
   if (lowerName.includes('black')) return '#0F172A';
-  if (lowerName.includes('white')) return '#E2E8F0';
+  if (lowerName.includes('white')) return '#FFFFFF';
   return null;
 };
 
@@ -90,68 +99,82 @@ function SortableChart({ cat, items, index }: SortableChartProps) {
 
   if (catItems.length === 0) return null;
 
-  // Determine width based on category name for the initial "beside" and "one row" requirement
+  // Determine width and height based on category name
   const isTile = cat.name.toLowerCase().includes('tile');
   const widthClass = isTile ? "lg:col-span-3" : "lg:col-span-2";
+  const chartHeight = isTile ? "h-[340px]" : "h-[300px]";
 
   return (
     <div 
       ref={setNodeRef} 
       style={style}
-      className={`bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-full ${widthClass} col-span-6`}
+      className={`bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col h-full ${widthClass} col-span-6 transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1`}
     >
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button 
             {...attributes} 
             {...listeners}
-            className="p-1 hover:bg-slate-100 rounded cursor-grab active:cursor-grabbing text-slate-400"
+            className="p-1.5 hover:bg-slate-50 rounded-lg cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors"
           >
-            <GripVertical size={20} />
+            <GripVertical size={22} />
           </button>
           <div>
-            <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">{cat.name}</h3>
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Current Inventory</p>
+            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none mb-1.5">{cat.name}</h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Inventory Level</p>
           </div>
         </div>
-        <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-blue-600">
-          <Package size={16} />
+        <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
+          <Package size={20} />
         </div>
       </div>
       
-      <div className="h-[300px] w-full">
+      <div className={`${chartHeight} w-full mt-auto`}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={catItems} margin={{ top: 30, right: 10, left: 0, bottom: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+          <BarChart data={catItems} margin={{ top: 35, right: 10, left: -20, bottom: 60 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F8FAFC" />
             <XAxis 
               dataKey="name" 
               axisLine={false} 
               tickLine={false} 
-              tick={{fill: '#64748B', fontSize: 9, fontWeight: 700}}
+              tick={{fill: '#475569', fontSize: 11, fontWeight: 800}}
               angle={-45}
               textAnchor="end"
               interval={0}
+              height={70}
             />
             <YAxis 
               axisLine={false} 
               tickLine={false} 
-              tick={{fill: '#94A3B8', fontSize: 9, fontWeight: 700}} 
+              tick={{fill: '#94A3B8', fontSize: 11, fontWeight: 700}} 
             />
             <Tooltip 
-              cursor={{fill: '#F8FAFC'}}
-              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+              cursor={{fill: '#F8FAFC', radius: 8}}
+              contentStyle={{ 
+                borderRadius: '16px', 
+                border: 'none', 
+                boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
+                fontSize: '13px',
+                fontWeight: '800',
+                padding: '14px'
+              }}
             />
-            <Bar dataKey="stock" radius={[4, 4, 0, 0]} barSize={30}>
+            <Bar dataKey="stock" radius={[8, 8, 0, 0]} barSize={isTile ? 45 : 35}>
               {catItems.map((entry, i) => {
                 const color = getColorByName(entry.name) || COLORS[index % COLORS.length];
                 return (
-                  <Cell key={`cell-${i}`} fill={color} />
+                  <Cell 
+                    key={`cell-${i}`} 
+                    fill={color}
+                    style={{ filter: 'drop-shadow(0 4px 6px rgb(0 0 0 / 0.05))' }}
+                  />
                 );
               })}
               <LabelList 
                 dataKey="stock" 
                 position="top" 
-                style={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
+                style={{ fill: '#1E293B', fontSize: 13, fontWeight: 900 }}
+                offset={10}
               />
             </Bar>
           </BarChart>
