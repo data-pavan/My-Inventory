@@ -12,8 +12,11 @@ import {
   Menu, 
   X,
   Search,
-  User as UserIcon
+  User as UserIcon,
+  TrendingUp,
+  BarChart3
 } from 'lucide-react';
+import { useAuth } from '../App';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -30,14 +33,17 @@ interface LayoutProps {
 export default function Layout({ children, currentView, setView }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const { profile } = useAuth();
 
   const menuItems = [
+    { id: 'management', label: 'Management', icon: TrendingUp, hidden: profile?.role !== 'admin' },
+    { id: 'stock-report', label: 'Stock Report', icon: BarChart3 },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'categories', label: 'Categories', icon: Layers },
     { id: 'items', label: 'Products', icon: Package },
     { id: 'transactions', label: 'Transactions', icon: History },
     { id: 'stock', label: 'Current Stock', icon: ArrowDownCircle },
-  ];
+  ].filter(item => !item.hidden);
 
   const handleSignOut = () => {
     signOut(auth);
@@ -189,8 +195,8 @@ export default function Layout({ children, currentView, setView }: LayoutProps) 
 
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end hidden sm:flex">
-              <span className="text-sm font-semibold text-slate-900">{auth.currentUser?.email}</span>
-              <span className="text-xs text-slate-500 capitalize">Administrator</span>
+              <span className="text-sm font-semibold text-slate-900">{profile?.email}</span>
+              <span className="text-xs text-slate-500 capitalize">{profile?.role === 'admin' ? 'Management' : 'Staff'}</span>
             </div>
             <div className="bg-slate-100 p-2 rounded-full border border-slate-200">
               <UserIcon size={20} className="text-slate-600" />

@@ -7,7 +7,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { toast } from 'react-hot-toast';
-import { LogIn, UserPlus, Package, Chrome } from 'lucide-react';
+import { LogIn, UserPlus, Package, Chrome, TrendingUp } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -16,28 +16,35 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showSecretLogin, setShowSecretLogin] = useState(false);
   const [secretCode, setSecretCode] = useState('');
+  const [loginType, setLoginType] = useState<'STAFF' | 'MANAGEMENT'>('STAFF');
 
   const handleSecretLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (secretCode !== '202603') {
+    
+    const validCodes = {
+      'STAFF': '202603',
+      'MANAGEMENT': '888888'
+    };
+
+    if (secretCode !== validCodes[loginType]) {
       toast.error('Invalid Secret Code');
       return;
     }
 
     setLoading(true);
     try {
-      // Use a "General Usage" account
-      const email = 'general@inventorypro.app';
-      const password = 'password202603';
+      // Use specific accounts for each role
+      const email = loginType === 'MANAGEMENT' ? 'admin@inventorypro.app' : 'general@inventorypro.app';
+      const password = loginType === 'MANAGEMENT' ? 'admin202603' : 'password202603';
       
       try {
         await signInWithEmailAndPassword(auth, email, password);
-        toast.success('Welcome!');
+        toast.success(`Welcome ${loginType === 'MANAGEMENT' ? 'Manager' : ''}!`);
       } catch (error: any) {
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
           // If user doesn't exist, create it
           await createUserWithEmailAndPassword(auth, email, password);
-          toast.success('General account created and logged in!');
+          toast.success(`${loginType} account created and logged in!`);
         } else {
           throw error;
         }
@@ -101,25 +108,35 @@ export default function Login() {
 
         {showSecretLogin ? (
           <form onSubmit={handleSecretLogin} className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                {loginType === 'MANAGEMENT' ? 'Management Access' : 'Staff Quick Access'}
+              </h3>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+                {loginType === 'MANAGEMENT' ? 'Enter Management PIN' : 'Enter Staff PIN'}
+              </p>
+            </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Enter Secret Login Code</label>
               <input
                 type="password"
                 required
                 value={secretCode}
                 onChange={(e) => setSecretCode(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-center text-2xl tracking-[0.5em] font-bold"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-all text-center text-2xl tracking-[0.5em] font-bold ${
+                  loginType === 'MANAGEMENT' ? 'border-indigo-200 focus:ring-indigo-500' : 'border-slate-200 focus:ring-blue-500'
+                }`}
                 placeholder="••••••"
                 maxLength={6}
                 autoFocus
               />
-              <p className="text-[10px] text-slate-400 mt-2 text-center uppercase tracking-wider font-bold">Use your master PIN for easy access</p>
             </div>
 
             <button
               type="submit"
               disabled={loading || secretCode.length < 6}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-600/20"
+              className={`w-full text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg ${
+                loginType === 'MANAGEMENT' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+              }`}
             >
               {loading ? (
                 <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -213,15 +230,26 @@ export default function Login() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowSecretLogin(true)}
-            disabled={loading}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-slate-900/20"
-          >
-            <Package size={20} className="text-blue-400" />
-            Login with Secret Code
-          </button>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => { setLoginType('STAFF'); setShowSecretLogin(true); }}
+              disabled={loading}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 shadow-lg shadow-slate-900/20"
+            >
+              <Package size={20} className="text-blue-400" />
+              <span className="text-[10px] uppercase tracking-widest font-black">Staff</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginType('MANAGEMENT'); setShowSecretLogin(true); }}
+              disabled={loading}
+              className="bg-indigo-900 hover:bg-indigo-800 text-white font-semibold py-3 rounded-xl transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 shadow-lg shadow-indigo-900/20"
+            >
+              <TrendingUp size={20} className="text-indigo-400" />
+              <span className="text-[10px] uppercase tracking-widest font-black">Management</span>
+            </button>
+          </div>
         </form>
       </>
     )}

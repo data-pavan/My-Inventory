@@ -11,6 +11,8 @@ import CategoryManagement from './components/CategoryManagement';
 import ItemManagement from './components/ItemManagement';
 import Transactions from './components/Transactions';
 import StockTable from './components/StockTable';
+import ManagementDashboard from './components/ManagementDashboard';
+import StockReport from './components/StockReport';
 import OverdueDispatchModal from './components/OverdueDispatchModal';
 
 interface AuthContextType {
@@ -37,18 +39,27 @@ export default function App() {
         const profileRef = doc(db, 'users', user.uid);
         const profileSnap = await getDoc(profileRef);
         
+        let userProfile: UserProfile;
         if (profileSnap.exists()) {
-          setProfile(profileSnap.data() as UserProfile);
+          userProfile = profileSnap.data() as UserProfile;
+          setProfile(userProfile);
         } else {
           // Default to staff if not exists, unless it's the admin email
-          const isAdmin = user.email === 'data.pavan11@gmail.com' || user.email === 'vidhi@bharatnatural.co';
-          const newProfile: UserProfile = {
+          const isAdmin = user.email === 'data.pavan11@gmail.com' || user.email === 'vidhi@bharatnatural.co' || user.email === 'admin@inventorypro.app';
+          userProfile = {
             uid: user.uid,
             email: user.email || '',
             role: isAdmin ? 'admin' : 'staff'
           };
-          await setDoc(profileRef, newProfile);
-          setProfile(newProfile);
+          await setDoc(profileRef, userProfile);
+          setProfile(userProfile);
+        }
+
+        // Set default view based on role
+        if (userProfile.role === 'admin') {
+          setCurrentView('management');
+        } else {
+          setCurrentView('dashboard');
         }
       } else {
         setProfile(null);
@@ -79,11 +90,13 @@ export default function App() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard': return <Dashboard setView={setCurrentView} />;
+      case 'management': return <ManagementDashboard />;
+      case 'stock-report': return <StockReport />;
       case 'categories': return <CategoryManagement />;
       case 'items': return <ItemManagement />;
       case 'transactions': return <Transactions />;
       case 'stock': return <StockTable />;
-      default: return <Dashboard setView={setCurrentView} />;
+      default: return profile?.role === 'admin' ? <ManagementDashboard /> : <Dashboard setView={setCurrentView} />;
     }
   };
 
