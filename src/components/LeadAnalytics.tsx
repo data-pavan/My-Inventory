@@ -82,7 +82,7 @@ export default function LeadAnalytics() {
     const dates = leads.map(lead => {
       let d: Date | null = null;
       if (!lead.leadDate) return null;
-      if (lead.leadDate instanceof Date) d = lead.leadDate;
+      if ((lead.leadDate as any) instanceof Date) d = lead.leadDate as any;
       else if (typeof lead.leadDate === 'string') {
         d = parseISO(lead.leadDate);
         if (!isValid(d)) d = new Date(lead.leadDate);
@@ -107,8 +107,8 @@ export default function LeadAnalytics() {
         let leadDateStr = '';
         if (typeof lead.leadDate === 'string') {
           leadDateStr = lead.leadDate.split('T')[0];
-        } else if (lead.leadDate instanceof Date) {
-          leadDateStr = format(lead.leadDate, 'yyyy-MM-dd');
+        } else if ((lead.leadDate as any) instanceof Date) {
+          leadDateStr = format(lead.leadDate as any, 'yyyy-MM-dd');
         } else if (typeof lead.leadDate === 'object' && (lead.leadDate as any).toDate) {
           leadDateStr = format((lead.leadDate as any).toDate(), 'yyyy-MM-dd');
         }

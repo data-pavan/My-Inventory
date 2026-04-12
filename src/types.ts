@@ -2,6 +2,26 @@ export type TransactionType = 'IN' | 'OUT' | 'SCHEDULED' | 'FACTORY_IN';
 
 export type LeadStatus = 'New' | 'Contacted' | 'Quote Sent' | 'Negotiation' | 'Won' | 'Lost';
 
+export type ProjectStatus = 'Completed' | 'WIP' | 'On Hold' | 'Delayed' | 'New';
+
+export interface Project {
+  id: string;
+  sNo: number;
+  salespersonName: string;
+  siteName: string;
+  projectCode: string;
+  projectStatus: ProjectStatus;
+  siteLocation: string;
+  projectDimension: string;
+  projectDetails: string;
+  productRequirements: string;
+  dispatchDetails: string;
+  remarks: string;
+  totalProjectValue: number;
+  pendingPayment: number;
+  createdAt: string;
+}
+
 export interface Lead {
   id: string;
   leadDate: string;

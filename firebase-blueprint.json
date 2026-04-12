@@ -78,6 +78,28 @@
         "createdAt": { "type": "string", "description": "Timestamp of creation" }
       },
       "required": ["leadDate", "salespersonName", "leadStatus", "convertedToProject"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A construction or installation project",
+      "type": "object",
+      "properties": {
+        "sNo": { "type": "number", "description": "Serial number" },
+        "salespersonName": { "type": "string", "description": "Name of the salesperson" },
+        "siteName": { "type": "string", "description": "Name of the site" },
+        "projectCode": { "type": "string", "description": "Unique project code" },
+        "projectStatus": { "type": "string", "enum": ["Completed", "WIP", "On Hold", "Delayed", "New"], "description": "Current status of the project" },
+        "siteLocation": { "type": "string", "description": "Location of the site" },
+        "projectDimension": { "type": "string", "description": "Dimensions of the project" },
+        "projectDetails": { "type": "string", "description": "Detailed description" },
+        "productRequirements": { "type": "string", "description": "Products required" },
+        "dispatchDetails": { "type": "string", "description": "Details of dispatch" },
+        "remarks": { "type": "string", "description": "Additional remarks" },
+        "totalProjectValue": { "type": "number", "description": "Total value of the project" },
+        "pendingPayment": { "type": "number", "description": "Amount pending for payment" },
+        "createdAt": { "type": "string", "description": "Timestamp of creation" }
+      },
+      "required": ["salespersonName", "siteName", "projectStatus", "totalProjectValue"]
     }
   },
   "firestore": {
@@ -85,6 +107,7 @@
     "/items/{itemId}": { "schema": "Item", "description": "Collection of items" },
     "/transactions/{transactionId}": { "schema": "Transaction", "description": "Collection of transactions" },
     "/users/{userId}": { "schema": "User", "description": "Collection of users" },
-    "/leads/{leadId}": { "schema": "Lead", "description": "Collection of sales leads" }
+    "/leads/{leadId}": { "schema": "Lead", "description": "Collection of sales leads" },
+    "/projects/{projectId}": { "schema": "Project", "description": "Collection of projects" }
   }
 }

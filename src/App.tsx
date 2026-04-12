@@ -17,6 +17,8 @@ import SiteMaterialStockReport from './components/SiteMaterialStockReport';
 import OverdueDispatchModal from './components/OverdueDispatchModal';
 import LeadAnalytics from './components/LeadAnalytics';
 import LeadManagement from './components/LeadManagement';
+import ProjectAnalytics from './components/ProjectAnalytics';
+import ProjectManagement from './components/ProjectManagement';
 
 interface AuthContextType {
   user: User | null;
@@ -97,11 +99,13 @@ export default function App() {
       case 'stock-report': return <StockReport />;
       case 'site-material-report': return <SiteMaterialStockReport />;
       case 'lead-analytics': return <LeadAnalytics />;
+      case 'project-analytics': return <ProjectAnalytics />;
       case 'categories': return <CategoryManagement />;
       case 'items': return <ItemManagement />;
       case 'transactions': return <Transactions />;
       case 'stock': return <StockTable />;
       case 'leads-data': return <LeadManagement />;
+      case 'projects-data': return <ProjectManagement />;
       default: return profile?.role === 'admin' ? <ManagementDashboard /> : <Dashboard setView={setCurrentView} />;
     }
   };

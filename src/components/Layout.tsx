@@ -37,11 +37,11 @@ interface LayoutProps {
 export default function Layout({ children, currentView, setView }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(['categories', 'items', 'transactions', 'stock', 'leads-data'].includes(currentView));
+  const [isSettingsOpen, setIsSettingsOpen] = useState(['categories', 'items', 'transactions', 'stock', 'leads-data', 'projects-data'].includes(currentView));
   const { profile } = useAuth();
 
   React.useEffect(() => {
-    if (['categories', 'items', 'transactions', 'stock', 'leads-data'].includes(currentView)) {
+    if (['categories', 'items', 'transactions', 'stock', 'leads-data', 'projects-data'].includes(currentView)) {
       setIsSettingsOpen(true);
     }
   }, [currentView]);
@@ -49,6 +49,7 @@ export default function Layout({ children, currentView, setView }: LayoutProps) 
   const mainMenuItems = [
     { id: 'management', label: 'Management', icon: TrendingUp, hidden: profile?.role !== 'admin' },
     { id: 'lead-analytics', label: 'Lead Analytics', icon: BarChart3 },
+    { id: 'project-analytics', label: 'Project Analytics', icon: BarChart3 },
     { id: 'stock-report', label: 'Stock Report', icon: BarChart3 },
     { id: 'site-material-report', label: 'Site Material Report', icon: BarChart3 },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -60,6 +61,7 @@ export default function Layout({ children, currentView, setView }: LayoutProps) 
     { id: 'transactions', label: 'Transactions', icon: History },
     { id: 'stock', label: 'Current Stock', icon: ArrowDownCircle },
     { id: 'leads-data', label: 'Leads Data', icon: FileText },
+    { id: 'projects-data', label: 'Projects Data', icon: FileText },
   ];
 
   const handleSignOut = () => {
