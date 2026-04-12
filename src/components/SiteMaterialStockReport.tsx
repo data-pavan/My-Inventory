@@ -42,12 +42,13 @@ import { CSS } from '@dnd-kit/utilities';
 
 const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316', '#14B8A6'];
 
-const getColorByName = (name: string) => {
+const getColorByName = (name: string, shouldGroupColor: boolean) => {
   const lowerName = name.toLowerCase();
   
   // Specific item colors
   if (lowerName.includes('silica sand')) return '#E2C799'; // Sand color
   
+  if (!shouldGroupColor) return null;
   if (lowerName.includes('red')) return '#EF4444';
   if (lowerName.includes('green')) return '#10B981';
   
@@ -58,7 +59,7 @@ const getColorByName = (name: string) => {
   if (lowerName.includes('yellow')) return '#F59E0B';
   if (lowerName.includes('orange')) return '#F97316';
   
-  // Differentiating Light and Dark Grey - Made Light Grey slightly darker for visibility
+  // Differentiating Light and Dark Grey
   if (lowerName.includes('light grey') || lowerName.includes('light gray')) return '#D1D5DB';
   if (lowerName.includes('dark grey') || lowerName.includes('dark gray')) return '#1E293B';
   if (lowerName.includes('grey') || lowerName.includes('gray')) return '#64748B';
@@ -70,17 +71,75 @@ const getColorByName = (name: string) => {
   return null;
 };
 
-const TARGET_KEYWORDS = ["pp tiles", "soft tiles", "kerb", "corner"];
+const extractDisplayName = (name: string, shouldGroupColor: boolean) => {
+  if (shouldGroupColor) {
+    const colors = [
+      'sky blue', 'light grey', 'light gray', 'dark grey', 'dark gray', 
+      'red', 'green', 'blue', 'yellow', 'orange', 'grey', 'gray', 'black', 'white',
+      'pink', 'purple'
+    ];
+    const lowerName = name.toLowerCase();
+    
+    for (const color of colors) {
+      if (lowerName.includes(color)) {
+        return color.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+      }
+    }
+  }
+  
+  // If no color grouping or no color found, clean up the name
+  return name.replace(/^(EPDM|Acrylic|Nets|Poles)\s+(Full|Loose|Half)\s+/i, '').trim();
+};
+
+interface ChartGroup {
+  id: string;
+  name: string;
+  keywords: string[];
+  widthClass: string;
+  chartHeight: string;
+}
+
+const GROUPS: ChartGroup[] = [
+  { 
+    id: 'group-epdm', 
+    name: 'EPDM (Full & Loose)', 
+    keywords: ['epdm full', 'epdm loose'], 
+    widthClass: 'col-span-6',
+    chartHeight: 'h-[400px]'
+  },
+  { 
+    id: 'group-acrylic', 
+    name: 'Acrylic (Full & Half)', 
+    keywords: ['acrylic full', 'acrylic half'], 
+    widthClass: 'col-span-6',
+    chartHeight: 'h-[400px]'
+  },
+  { 
+    id: 'group-poles', 
+    name: 'Poles', 
+    keywords: ['pole'], 
+    widthClass: 'lg:col-span-4 col-span-6',
+    chartHeight: 'h-[320px]'
+  },
+  { 
+    id: 'group-nets', 
+    name: 'Nets', 
+    keywords: ['net'], 
+    widthClass: 'lg:col-span-2 col-span-6',
+    chartHeight: 'h-[320px]'
+  }
+];
 
 interface SortableChartProps {
-  cat: Category;
+  group: ChartGroup;
+  categories: Category[];
   items: Item[];
   transactions: Transaction[];
   selectedDate: string;
   index: number;
 }
 
-function SortableChart({ cat, items, transactions, selectedDate, index }: SortableChartProps) {
+function SortableChart({ group, categories, items, transactions, selectedDate, index }: SortableChartProps) {
   const {
     attributes,
     listeners,
@@ -88,7 +147,7 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
     transform,
     transition,
     isDragging
-  } = useSortable({ id: cat.id });
+  } = useSortable({ id: group.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -100,9 +159,18 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
   const dayStart = startOfDay(parseISO(selectedDate)).getTime();
   const dayEnd = endOfDay(parseISO(selectedDate)).getTime();
 
-  const catItems = items
-    .filter(item => item.categoryId === cat.id)
-    .map(item => {
+  // Find all categories that match this group's keywords
+  const groupCategoryIds = categories
+    .filter(cat => group.keywords.some(kw => cat.name.toLowerCase().includes(kw)))
+    .map(cat => cat.id);
+
+  // Group items by color/display name and sum stock
+  const groupedData = items
+    .filter(item => groupCategoryIds.includes(item.categoryId))
+    .reduce((acc, item) => {
+      const isColorGrouped = group.id.includes('epdm') || group.id.includes('acrylic');
+      const displayName = extractDisplayName(item.name, isColorGrouped);
+      
       const itemTxs = transactions.filter(tx => tx.itemId === item.id);
       
       // Calculate opening stock
@@ -123,30 +191,37 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
 
       const closingStock = openingStock + stockIn - stockOut;
 
-      return {
-        name: item.name,
-        stock: closingStock,
-        openingStock,
-        stockIn,
-        stockOut,
-        unit: item.unit || '',
-        stockLabel: `${closingStock} ${item.unit || ''}`
-      };
-    })
+      if (!acc[displayName]) {
+        acc[displayName] = { 
+          name: displayName, 
+          stock: 0, 
+          openingStock: 0,
+          stockIn: 0,
+          stockOut: 0,
+          unit: item.unit || '' 
+        };
+      }
+      acc[displayName].stock += closingStock;
+      acc[displayName].openingStock += openingStock;
+      acc[displayName].stockIn += stockIn;
+      acc[displayName].stockOut += stockOut;
+      return acc;
+    }, {} as Record<string, { name: string, stock: number, openingStock: number, stockIn: number, stockOut: number, unit: string }>);
+
+  const catItems = Object.values(groupedData)
+    .map(data => ({
+      ...data,
+      stockLabel: `${data.stock} ${data.unit}`
+    }))
     .sort((a, b) => b.stock - a.stock);
 
   if (catItems.length === 0) return null;
-
-  // Determine width and height based on category name
-  const isTile = cat.name.toLowerCase().includes('tile');
-  const widthClass = isTile ? "lg:col-span-3" : "lg:col-span-2";
-  const chartHeight = isTile ? "h-[340px]" : "h-[300px]";
 
   return (
     <div 
       ref={setNodeRef} 
       style={style}
-      className={`bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col h-full ${widthClass} col-span-6 transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1`}
+      className={`bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col h-full ${group.widthClass} transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1`}
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
@@ -155,36 +230,36 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
             {...listeners}
             className="p-2 hover:bg-slate-50 rounded-lg cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors"
           >
-            <GripVertical size={22} />
+            <GripVertical size={24} />
           </button>
           <div>
-            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none mb-1.5">{cat.name}</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Inventory Level</p>
+            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-1.5">{group.name}</h3>
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Inventory Level (Aggregated by Color)</p>
           </div>
         </div>
-        <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
-          <Package size={20} />
+        <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
+          <Package size={24} />
         </div>
       </div>
       
-      <div className={`${chartHeight} w-full mt-auto`}>
+      <div className={`${group.chartHeight} w-full mt-auto`}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={catItems} margin={{ top: 35, right: 10, left: -20, bottom: 60 }}>
+          <BarChart data={catItems} margin={{ top: 35, right: 10, left: -10, bottom: 80 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F8FAFC" />
             <XAxis 
               dataKey="name" 
               axisLine={false} 
               tickLine={false} 
-              tick={{fill: '#475569', fontSize: 11, fontWeight: 800}}
+              tick={{fill: '#475569', fontSize: 12, fontWeight: 800}}
               angle={-45}
               textAnchor="end"
               interval={0}
-              height={70}
+              height={90}
             />
             <YAxis 
               axisLine={false} 
               tickLine={false} 
-              tick={{fill: '#94A3B8', fontSize: 11, fontWeight: 700}} 
+              tick={{fill: '#94A3B8', fontSize: 12, fontWeight: 700}} 
             />
             <Tooltip 
               cursor={{fill: '#F8FAFC', radius: 8}}
@@ -194,7 +269,7 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
                 boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
                 fontSize: '12px',
                 fontWeight: '800',
-                padding: '14px'
+                padding: '16px'
               }}
               content={({ active, payload, label }) => {
                 if (active && payload && payload.length) {
@@ -226,9 +301,10 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
                 return null;
               }}
             />
-            <Bar dataKey="stock" radius={[8, 8, 0, 0]} barSize={isTile ? 45 : 35}>
+            <Bar dataKey="stock" radius={[10, 10, 0, 0]} barSize={catItems.length > 5 ? 40 : 60}>
               {catItems.map((entry, i) => {
-                const color = getColorByName(entry.name) || COLORS[index % COLORS.length];
+                const isColorGrouped = group.id.includes('epdm') || group.id.includes('acrylic');
+                const color = getColorByName(entry.name, isColorGrouped) || COLORS[index % COLORS.length];
                 return (
                   <Cell 
                     key={`cell-${i}`} 
@@ -240,8 +316,8 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
               <LabelList 
                 dataKey="stockLabel" 
                 position="top" 
-                style={{ fill: '#1E293B', fontSize: 13, fontWeight: 900 }}
-                offset={10}
+                style={{ fill: '#1E293B', fontSize: 14, fontWeight: 900 }}
+                offset={12}
               />
             </Bar>
           </BarChart>
@@ -251,12 +327,12 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
   );
 }
 
-export default function StockReport() {
+export default function SiteMaterialStockReport() {
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [orderedCategoryIds, setOrderedCategoryIds] = useState<string[]>([]);
+  const [orderedGroupIds, setOrderedGroupIds] = useState<string[]>(GROUPS.map(g => g.id));
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   const sensors = useSensors(
@@ -274,32 +350,6 @@ export default function StockReport() {
     const unsubCategories = onSnapshot(collection(db, 'categories'), (snap) => {
       const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
       setCategories(cats);
-      
-      // Initialize order if not set
-      if (orderedCategoryIds.length === 0) {
-        const filtered = cats.filter(cat => 
-          TARGET_KEYWORDS.some(keyword => cat.name.toLowerCase().includes(keyword))
-        );
-        
-        // Sort according to user request: PP Tiles, Soft Tiles, then Kerbs/Corner
-        const sorted = [...filtered].sort((a, b) => {
-          const aName = a.name.toLowerCase();
-          const bName = b.name.toLowerCase();
-          
-          const getWeight = (name: string) => {
-            if (name.includes('pp tile')) return 1;
-            if (name.includes('soft tile')) return 2;
-            if (name.includes('kerb male')) return 3;
-            if (name.includes('kerb female')) return 4;
-            if (name.includes('corner')) return 5;
-            return 10;
-          };
-          
-          return getWeight(aName) - getWeight(bName);
-        });
-        
-        setOrderedCategoryIds(sorted.map(c => c.id));
-      }
     });
 
     const unsubTransactions = onSnapshot(
@@ -315,20 +365,13 @@ export default function StockReport() {
       unsubCategories();
       unsubTransactions();
     };
-  }, [orderedCategoryIds.length]);
-
-  const filteredCategories = useMemo(() => {
-    const catsMap = new Map(categories.map(c => [c.id, c]));
-    return orderedCategoryIds
-      .map(id => catsMap.get(id))
-      .filter((c): c is Category => !!c && TARGET_KEYWORDS.some(keyword => c.name.toLowerCase().includes(keyword)));
-  }, [categories, orderedCategoryIds]);
+  }, []);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
     if (over && active.id !== over.id) {
-      setOrderedCategoryIds((items) => {
+      setOrderedGroupIds((items) => {
         const oldIndex = items.indexOf(active.id as string);
         const newIndex = items.indexOf(over.id as string);
         return arrayMove(items, oldIndex, newIndex);
@@ -337,32 +380,20 @@ export default function StockReport() {
   };
 
   const resetLayout = () => {
-    const filtered = categories.filter(cat => 
-      TARGET_KEYWORDS.some(keyword => cat.name.toLowerCase().includes(keyword))
-    );
-    const sorted = [...filtered].sort((a, b) => {
-      const aName = a.name.toLowerCase();
-      const bName = b.name.toLowerCase();
-      const getWeight = (name: string) => {
-        if (name.includes('pp tile')) return 1;
-        if (name.includes('soft tile')) return 2;
-        if (name.includes('kerb male')) return 3;
-        if (name.includes('kerb female')) return 4;
-        if (name.includes('corner')) return 5;
-        return 10;
-      };
-      return getWeight(aName) - getWeight(bName);
-    });
-    setOrderedCategoryIds(sorted.map(c => c.id));
+    setOrderedGroupIds(GROUPS.map(g => g.id));
   };
 
   const exportToExcel = () => {
     const data: any[] = [];
-    filteredCategories.forEach(cat => {
-      const catItems = items.filter(item => item.categoryId === cat.id);
-      catItems.forEach(item => {
+    GROUPS.forEach(group => {
+      const groupCategoryIds = categories
+        .filter(cat => group.keywords.some(kw => cat.name.toLowerCase().includes(kw)))
+        .map(cat => cat.id);
+        
+      const groupItems = items.filter(item => groupCategoryIds.includes(item.categoryId));
+      groupItems.forEach(item => {
         data.push({
-          'Category': cat.name,
+          'Group': group.name,
           'Product Name': item.name,
           'Current Stock': item.currentStock,
           'Unit': item.unit
@@ -371,8 +402,8 @@ export default function StockReport() {
     });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Detailed Stock Report");
-    XLSX.writeFile(wb, `Detailed_Stock_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Site Material Stock Report");
+    XLSX.writeFile(wb, `Site_Material_Stock_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   if (loading) return (
@@ -385,8 +416,8 @@ export default function StockReport() {
     <div className="w-full max-w-[100vw] space-y-8 pb-20 md:pb-0 px-2 lg:px-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Stock Report</h1>
-          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Interactive inventory dashboard</p>
+          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Site Material Stock Report</h1>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Interactive site material dashboard</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button 
@@ -424,20 +455,25 @@ export default function StockReport() {
         onDragEnd={handleDragEnd}
       >
         <SortableContext 
-          items={orderedCategoryIds}
+          items={orderedGroupIds}
           strategy={rectSortingStrategy}
         >
           <div className="grid grid-cols-6 gap-6">
-            {filteredCategories.map((cat, index) => (
-              <SortableChart 
-                key={cat.id} 
-                cat={cat} 
-                items={items} 
-                transactions={transactions}
-                selectedDate={selectedDate}
-                index={index} 
-              />
-            ))}
+            {orderedGroupIds.map((groupId, index) => {
+              const group = GROUPS.find(g => g.id === groupId);
+              if (!group) return null;
+              return (
+                <SortableChart 
+                  key={group.id} 
+                  group={group}
+                  categories={categories}
+                  items={items} 
+                  transactions={transactions}
+                  selectedDate={selectedDate}
+                  index={index} 
+                />
+              );
+            })}
           </div>
         </SortableContext>
       </DndContext>

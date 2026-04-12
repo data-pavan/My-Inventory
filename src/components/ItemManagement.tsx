@@ -32,6 +32,9 @@ export default function ItemManagement() {
     loading: boolean;
   } | null>(null);
 
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
       setItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item)));
@@ -86,14 +89,24 @@ export default function ItemManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+  const handleDelete = async () => {
+    if (!itemToDelete) return;
+    setLoading(true);
     try {
-      await deleteDoc(doc(db, 'items', id));
+      await deleteDoc(doc(db, 'items', itemToDelete));
       toast.success('Item deleted successfully');
+      setIsDeleteModalOpen(false);
+      setItemToDelete(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'items');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const initiateDelete = (id: string) => {
+    setItemToDelete(id);
+    setIsDeleteModalOpen(true);
   };
 
   const handleAudit = async (item: Item) => {
@@ -279,7 +292,7 @@ export default function ItemManagement() {
                       <Edit2 size={20} />
                     </button>
                     <button 
-                      onClick={() => handleDelete(item.id)}
+                      onClick={() => initiateDelete(item.id)}
                       className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                     >
                       <Trash2 size={20} />
@@ -386,7 +399,7 @@ export default function ItemManagement() {
                         <Edit2 size={16} />
                       </button>
                       <button 
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => initiateDelete(item.id)}
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                       >
                         <Trash2 size={16} />
@@ -539,6 +552,49 @@ export default function ItemManagement() {
                   <span>Fix Discrepancy</span>
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-300">
+            <div className="p-6 border-b border-slate-100 bg-rose-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-rose-600 text-white rounded-lg">
+                  <Trash2 size={24} />
+                </div>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Delete Product</h3>
+              </div>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 font-medium">
+                Are you sure you want to delete this product? This action cannot be undone and will remove all stock history.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 px-4 py-3 border-2 border-slate-100 text-slate-500 font-black uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className="flex-1 bg-rose-600 text-white font-black uppercase tracking-widest py-3 rounded-xl hover:bg-rose-700 transition-all disabled:opacity-50 flex items-center justify-center text-xs shadow-lg shadow-rose-600/20"
+                >
+                  {loading ? (
+                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

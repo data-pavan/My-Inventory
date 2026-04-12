@@ -24,10 +24,7 @@ export default function StockTable() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState('ALL');
-  const [dateRange, setDateRange] = useState({
-    start: format(new Date(), 'yyyy-MM-dd'),
-    end: format(new Date(), 'yyyy-MM-dd')
-  });
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -50,8 +47,8 @@ export default function StockTable() {
     };
   }, []);
 
-  const rangeStart = startOfDay(parseISO(dateRange.start)).getTime();
-  const rangeEnd = endOfDay(parseISO(dateRange.end)).getTime();
+  const dayStart = startOfDay(parseISO(selectedDate)).getTime();
+  const dayEnd = endOfDay(parseISO(selectedDate)).getTime();
 
   const filteredItems = items.filter(item => {
     const category = categories.find(c => c.id === item.categoryId);
@@ -76,10 +73,10 @@ export default function StockTable() {
       return item.isStockable !== false;
     }).reduce((acc, item) => acc + item.currentStock, 0),
     stockIn: transactions
-      .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+      .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
       .reduce((acc, tx) => acc + tx.quantity, 0),
     stockOut: transactions
-      .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+      .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
       .reduce((acc, tx) => acc + tx.quantity, 0),
     lowStockCount: items.filter(item => {
       return item.isStockable !== false && item.currentStock <= item.minStock;
@@ -132,8 +129,10 @@ export default function StockTable() {
     worksheet.columns = [
       { header: 'Item Name', key: 'name', width: 30 },
       { header: 'Category', key: 'category', width: 20 },
+      { header: 'Opening Stock', key: 'openingStock', width: 15 },
       { header: 'Stock IN (Period)', key: 'stockIn', width: 15 },
       { header: 'Stock OUT (Period)', key: 'stockOut', width: 15 },
+      { header: 'Closing Stock', key: 'closingStock', width: 15 },
       { header: 'Current Stock', key: 'currentStock', width: 15 },
       { header: 'Unit', key: 'unit', width: 10 },
       { header: 'Minimum Stock', key: 'minStock', width: 15 },
@@ -143,18 +142,32 @@ export default function StockTable() {
     // Add data
     itemsToExport.forEach(item => {
       const itemTxs = transactions.filter(tx => tx.itemId === item.id);
+      
+      // Calculate opening stock (stock before selected date)
+      let openingStock = Number(item.initialStock || 0);
+      itemTxs.forEach(tx => {
+        if (new Date(tx.date).getTime() < dayStart) {
+          if (tx.type === 'IN' || tx.type === 'FACTORY_IN') openingStock += tx.quantity;
+          if (tx.type === 'OUT' || tx.type === 'SCHEDULED') openingStock -= tx.quantity;
+        }
+      });
+
       const stockIn = itemTxs
-        .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+        .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
         .reduce((acc, tx) => acc + tx.quantity, 0);
       const stockOut = itemTxs
-        .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+        .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
         .reduce((acc, tx) => acc + tx.quantity, 0);
+
+      const closingStock = openingStock + stockIn - stockOut;
 
       const row = worksheet.addRow({
         name: item.name,
         category: categories.find(c => c.id === item.categoryId)?.name || 'Unknown',
+        openingStock: openingStock,
         stockIn: stockIn,
         stockOut: stockOut,
+        closingStock: closingStock,
         currentStock: item.currentStock,
         unit: item.unit,
         minStock: item.minStock,
@@ -282,19 +295,13 @@ export default function StockTable() {
           <div className="lg:col-span-4 flex items-center gap-2">
             <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
               <CalendarIcon size={16} className="text-slate-400 shrink-0" />
-              <div className="flex items-center gap-1 w-full">
+              <div className="flex items-center gap-2 w-full">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Date:</span>
                 <input 
                   type="date"
-                  value={dateRange.start}
-                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                  className="bg-transparent border-none p-0 text-xs focus:ring-0 w-full outline-none"
-                />
-                <span className="text-slate-400 text-xs">to</span>
-                <input 
-                  type="date"
-                  value={dateRange.end}
-                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                  className="bg-transparent border-none p-0 text-xs focus:ring-0 w-full outline-none"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent border-none p-0 text-xs font-bold focus:ring-0 w-full outline-none text-slate-700"
                 />
               </div>
             </div>
@@ -379,12 +386,24 @@ export default function StockTable() {
             const isLow = currentStock <= minStock;
             
             const itemTxs = transactions.filter(tx => tx.itemId === item.id);
+            
+            // Calculate opening stock
+            let openingStock = Number(item.initialStock || 0);
+            itemTxs.forEach(tx => {
+              if (new Date(tx.date).getTime() < dayStart) {
+                if (tx.type === 'IN' || tx.type === 'FACTORY_IN') openingStock += tx.quantity;
+                if (tx.type === 'OUT' || tx.type === 'SCHEDULED') openingStock -= tx.quantity;
+              }
+            });
+
             const stockIn = itemTxs
-              .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+              .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
               .reduce((acc, tx) => acc + tx.quantity, 0);
             const stockOut = itemTxs
-              .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+              .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
               .reduce((acc, tx) => acc + tx.quantity, 0);
+
+            const closingStock = openingStock + stockIn - stockOut;
 
             return (
               <div 
@@ -425,6 +444,17 @@ export default function StockTable() {
                         Healthy
                       </span>
                     )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest block mb-1">Opening Stock</span>
+                      <span className="text-xs font-black text-slate-700">{openingStock} {item.unit}</span>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest block mb-1">Closing Stock</span>
+                      <span className="text-xs font-black text-blue-600">{closingStock} {item.unit}</span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50/50 rounded-2xl border border-slate-100/50">
@@ -478,8 +508,10 @@ export default function StockTable() {
                 </th>
                 <th className="px-4 py-3 font-semibold">Item Name</th>
                 <th className="px-4 py-3 font-semibold">Category</th>
+                <th className="px-4 py-3 font-semibold text-center">Opening Stock</th>
                 <th className="px-4 py-3 font-semibold text-center">Stock IN</th>
                 <th className="px-4 py-3 font-semibold text-center">Stock OUT</th>
+                <th className="px-4 py-3 font-semibold text-center">Closing Stock</th>
                 <th className="px-4 py-3 font-semibold">Current Stock</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
               </tr>
@@ -492,12 +524,24 @@ export default function StockTable() {
                 const isLow = currentStock <= minStock;
                 
                 const itemTxs = transactions.filter(tx => tx.itemId === item.id);
+                
+                // Calculate opening stock
+                let openingStock = Number(item.initialStock || 0);
+                itemTxs.forEach(tx => {
+                  if (new Date(tx.date).getTime() < dayStart) {
+                    if (tx.type === 'IN' || tx.type === 'FACTORY_IN') openingStock += tx.quantity;
+                    if (tx.type === 'OUT' || tx.type === 'SCHEDULED') openingStock -= tx.quantity;
+                  }
+                });
+
                 const stockIn = itemTxs
-                  .filter(tx => tx.type === 'IN' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+                  .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
                   .reduce((acc, tx) => acc + tx.quantity, 0);
                 const stockOut = itemTxs
-                  .filter(tx => tx.type === 'OUT' && new Date(tx.date).getTime() >= rangeStart && new Date(tx.date).getTime() <= rangeEnd)
+                  .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
                   .reduce((acc, tx) => acc + tx.quantity, 0);
+
+                const closingStock = openingStock + stockIn - stockOut;
 
                 return (
                   <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${selectedItemIds.includes(item.id) ? 'bg-indigo-50/30' : ''}`}>
@@ -521,10 +565,16 @@ export default function StockTable() {
                       <span className="text-xs text-slate-600">{category?.name || 'Unknown'}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
+                      <span className="font-bold text-slate-600 text-sm">{openingStock}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       <span className="font-bold text-emerald-600 text-sm">{Number(stockIn) || 0}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="font-bold text-rose-600 text-sm">{Number(stockOut) || 0}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="font-bold text-blue-600 text-sm">{closingStock}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">

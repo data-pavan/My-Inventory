@@ -38,10 +38,11 @@ import {
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit, writeBatch, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Item, Transaction, Category } from '../types';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths, isWithinInterval, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
+import { Item, Transaction, Category, OperationType } from '../types';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths, isWithinInterval, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, parseISO } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { toast } from 'react-hot-toast';
+import { handleFirestoreError } from '../lib/firestoreErrorHandler';
 
 export default function Dashboard({ setView }: { setView: (view: string) => void }) {
   const [items, setItems] = useState<Item[]>([]);
@@ -54,9 +55,7 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
   const [selectedItemId, setSelectedItemId] = useState<string>('all');
   
   // Pinned items for overview cards
-  const [pinnedItemIds, setPinnedItemIds] = useState<string[]>([]);
-  const [isCustomizing, setIsCustomizing] = useState(false);
-  const [overviewCategoryId, setOverviewCategoryId] = useState<string>('all');
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   // Production Analytics State
   const [prodTimeframe, setProdTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily');
@@ -125,6 +124,47 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
     }, 800);
   };
 
+  const dayStart = startOfDay(parseISO(selectedDate)).getTime();
+  const dayEnd = endOfDay(parseISO(selectedDate)).getTime();
+
+  const dayStats = useMemo(() => {
+    let totalOpening = 0;
+    let totalIn = 0;
+    let totalOut = 0;
+
+    items.forEach(item => {
+      const itemTxs = transactions.filter(tx => tx.itemId === item.id);
+      
+      // Opening
+      let opening = Number(item.initialStock || 0);
+      itemTxs.forEach(tx => {
+        if (new Date(tx.date).getTime() < dayStart) {
+          if (tx.type === 'IN' || tx.type === 'FACTORY_IN') opening += tx.quantity;
+          if (tx.type === 'OUT' || tx.type === 'SCHEDULED') opening -= tx.quantity;
+        }
+      });
+      totalOpening += opening;
+
+      // Day In/Out
+      const dayIn = itemTxs
+        .filter(tx => (tx.type === 'IN' || tx.type === 'FACTORY_IN') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
+        .reduce((acc, tx) => acc + tx.quantity, 0);
+      const dayOut = itemTxs
+        .filter(tx => (tx.type === 'OUT' || tx.type === 'SCHEDULED') && new Date(tx.date).getTime() >= dayStart && new Date(tx.date).getTime() <= dayEnd)
+        .reduce((acc, tx) => acc + tx.quantity, 0);
+      
+      totalIn += dayIn;
+      totalOut += dayOut;
+    });
+
+    return {
+      opening: totalOpening,
+      in: totalIn,
+      out: totalOut,
+      closing: totalOpening + totalIn - totalOut
+    };
+  }, [items, transactions, dayStart, dayEnd]);
+
   const [expandedRecentGroups, setExpandedRecentGroups] = useState<{ [key: string]: boolean }>({});
   const toggleRecentGroup = (groupKey: string) => {
     setExpandedRecentGroups(prev => ({
@@ -137,26 +177,19 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
       const fetchedItems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item));
       setItems(fetchedItems);
-      
-      // Initialize pinned items if empty
-      const savedPinned = localStorage.getItem('pinnedItemIds');
-      if (savedPinned) {
-        setPinnedItemIds(JSON.parse(savedPinned));
-      } else if (fetchedItems.length > 0) {
-        setPinnedItemIds(fetchedItems.slice(0, 4).map(i => i.id));
-      }
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'items'));
 
     const unsubTransactions = onSnapshot(
       query(collection(db, 'transactions'), orderBy('date', 'desc')), 
       (snap) => {
         setTransactions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
-      }
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'transactions')
     );
 
     const unsubCategories = onSnapshot(collection(db, 'categories'), (snap) => {
       setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'categories'));
 
     setLoading(false);
     return () => {
@@ -264,20 +297,6 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
     );
   }, [transactions]);
 
-  const togglePin = (id: string) => {
-    const newPinned = pinnedItemIds.includes(id)
-      ? pinnedItemIds.filter(pid => pid !== id)
-      : [...pinnedItemIds, id];
-    setPinnedItemIds(newPinned);
-    localStorage.setItem('pinnedItemIds', JSON.stringify(newPinned));
-  };
-
-  const filteredItemsForChart = items.filter(item => {
-    const catMatch = selectedCategoryId === 'all' || item.categoryId === selectedCategoryId;
-    const itemMatch = selectedItemId === 'all' || item.id === selectedItemId;
-    return catMatch && itemMatch;
-  });
-
   const last7Days = [...Array(7)].map((_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - i);
@@ -359,13 +378,6 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
     XLSX.writeFile(wb, `Inventory_Summary_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  const pinnedItems = items.filter(item => {
-    if (overviewCategoryId === 'all') {
-      return pinnedItemIds.includes(item.id);
-    }
-    return item.categoryId === overviewCategoryId;
-  });
-
   const globalStats = {
     lowStockCount: items.filter(item => item.currentStock <= item.minStock).length,
     totalScheduled: items.reduce((acc, item) => acc + (item.scheduledStock || 0), 0)
@@ -383,25 +395,15 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
           <p className="text-xs text-slate-500">Real-time inventory insights and analytics</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={overviewCategoryId}
-            onChange={(e) => setOverviewCategoryId(e.target.value)}
-            className="flex-1 sm:flex-none px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
-          >
-            <option value="all">All Categories</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-          <button 
-            onClick={() => setIsCustomizing(!isCustomizing)}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors shadow-sm border text-sm font-medium ${
-              isCustomizing ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            <Package size={18} />
-            <span>{isCustomizing ? 'Finish' : 'Select Items'}</span>
-          </button>
+          <div className="flex-1 sm:flex-none px-3 py-2 bg-white border border-slate-200 rounded-lg flex items-center gap-2 shadow-sm">
+            <Calendar size={16} className="text-blue-600" />
+            <input 
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent border-none p-0 text-xs font-black text-slate-700 focus:ring-0 outline-none"
+            />
+          </div>
           <button 
             onClick={runHealthCheck}
             disabled={isHealthChecking}
@@ -422,234 +424,91 @@ export default function Dashboard({ setView }: { setView: (view: string) => void
 
       {/* Global Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 px-1 sm:px-0">
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[120px]">
-          <div className="flex items-center justify-between">
-            <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
-              <AlertTriangle size={20} />
-            </div>
-            <span className="text-[10px] font-black text-rose-600 bg-rose-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Critical</span>
-          </div>
-          <div>
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">Low Stock</p>
-            <p className="text-2xl font-black text-slate-900 leading-none mt-1">{Number(globalStats.lowStockCount) || 0}</p>
-          </div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[100px]">
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">Opening Stock</p>
+          <p className="text-2xl font-black text-slate-900 leading-none mt-2">{dayStats.opening.toLocaleString()}</p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Total across all items</p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col min-h-[120px] col-span-2 lg:col-span-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-                <Clock size={20} />
-              </div>
-              <div>
-                <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">Scheduled Orders</p>
-                <p className="text-xs font-bold text-slate-400">{groupedScheduled.length} Pending PIs</p>
-              </div>
-            </div>
-            <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Pending</span>
-          </div>
-          
-          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {groupedScheduled.map(([groupKey, groupTxs], index) => {
-              const firstTx = groupTxs[groupTxs.length - 1];
-              return (
-                <div key={groupKey} className="bg-slate-50/50 rounded-xl p-4 border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-black text-slate-400">{index + 1}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-[11px] font-black text-slate-900 truncate">{groupKey}</p>
-                        <span className="text-[8px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-lg uppercase tracking-widest">
-                          {groupTxs.length} Items
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
-                          <User size={10} /> {firstTx.salesPerson || 'N/A'}
-                        </p>
-                        <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
-                          <MapPin size={10} /> {firstTx.sourceDestination || 'N/A'}
-                        </p>
-                        <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
-                          <Calendar size={10} /> {format(new Date(firstTx.date), 'MMM d, yyyy')}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setView('transactions')}
-                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all shrink-0"
-                  >
-                    View Details
-                  </button>
-                </div>
-              );
-            })}
-            {groupedScheduled.length === 0 && (
-              <div className="py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                <Clock size={32} className="mx-auto text-slate-300 mb-3" />
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Scheduled Orders Found</p>
-              </div>
-            )}
-          </div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[100px]">
+          <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.15em]">Stock In</p>
+          <p className="text-2xl font-black text-emerald-600 leading-none mt-2">+{dayStats.in.toLocaleString()}</p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">On {format(parseISO(selectedDate), 'MMM d')}</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[100px]">
+          <p className="text-rose-500 text-[10px] font-black uppercase tracking-[0.15em]">Stock Out</p>
+          <p className="text-2xl font-black text-rose-600 leading-none mt-2">-{dayStats.out.toLocaleString()}</p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">On {format(parseISO(selectedDate), 'MMM d')}</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between min-h-[100px]">
+          <p className="text-blue-600 text-[10px] font-black uppercase tracking-[0.15em]">Closing Stock</p>
+          <p className="text-2xl font-black text-blue-600 leading-none mt-2">{dayStats.closing.toLocaleString()}</p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Total across all items</p>
         </div>
       </div>
 
-      {isCustomizing && (
-        <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 animate-in fade-in slide-in-from-top-4 duration-300 mx-1 sm:mx-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      {/* Scheduled Orders Section */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col mx-1 sm:mx-0">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+              <Clock size={20} />
+            </div>
             <div>
-              <h3 className="text-indigo-900 font-black uppercase tracking-tight text-lg">Customize Overview</h3>
-              <p className="text-[11px] text-indigo-600 font-bold uppercase tracking-widest">Select products to pin on dashboard</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => {
-                  const allIds = items
-                    .filter(item => overviewCategoryId === 'all' || item.categoryId === overviewCategoryId)
-                    .map(i => i.id);
-                  const newPinned = Array.from(new Set([...pinnedItemIds, ...allIds]));
-                  setPinnedItemIds(newPinned);
-                  localStorage.setItem('pinnedItemIds', JSON.stringify(newPinned));
-                }}
-                className="text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-100 bg-white border border-indigo-100 px-3 py-1.5 rounded-xl transition-all"
-              >
-                Select All
-              </button>
-              <button
-                onClick={() => {
-                  const currentCategoryIds = items
-                    .filter(item => overviewCategoryId === 'all' || item.categoryId === overviewCategoryId)
-                    .map(i => i.id);
-                  const newPinned = pinnedItemIds.filter(id => !currentCategoryIds.includes(id));
-                  setPinnedItemIds(newPinned);
-                  localStorage.setItem('pinnedItemIds', JSON.stringify(newPinned));
-                }}
-                className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 bg-white border border-slate-100 px-3 py-1.5 rounded-xl transition-all"
-              >
-                Clear
-              </button>
+              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">Scheduled Orders</p>
+              <p className="text-xs font-bold text-slate-400">{groupedScheduled.length} Pending PIs</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
-            {items
-              .filter(item => overviewCategoryId === 'all' || item.categoryId === overviewCategoryId)
-              .map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => togglePin(item.id)}
-                  className={`px-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all border truncate ${
-                    pinnedItemIds.includes(item.id)
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/20'
-                      : 'bg-white text-slate-600 border-slate-100 hover:border-indigo-300'
-                  }`}
-                >
-                  {item.name}
-                </button>
-              ))}
-          </div>
+          <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Pending</span>
         </div>
-      )}
-
-      {/* Stats Grid - Category Wise Grouping */}
-      <div className="space-y-8">
-        {categories
-          .filter(cat => overviewCategoryId === 'all' || cat.id === overviewCategoryId)
-          .map(category => {
-            const categoryItems = pinnedItems.filter(item => item.categoryId === category.id);
-            if (categoryItems.length === 0) return null;
-
+        
+        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+          {groupedScheduled.map(([groupKey, groupTxs], index) => {
+            const firstTx = groupTxs[groupTxs.length - 1];
             return (
-              <div key={category.id} className="space-y-4">
-                <div className="flex items-center gap-3 px-1 sm:px-0">
-                  <div className="h-6 w-1 bg-blue-600 rounded-full"></div>
-                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">{category.name}</h2>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">
-                    {categoryItems.length} {categoryItems.length === 1 ? 'Item' : 'Items'}
-                  </span>
+              <div key={groupKey} className="bg-slate-50/50 rounded-xl p-4 border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-black text-slate-400">{index + 1}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-[11px] font-black text-slate-900 truncate">{groupKey}</p>
+                      <span className="text-[8px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-lg uppercase tracking-widest">
+                        {groupTxs.length} Items
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                        <User size={10} /> {firstTx.salesPerson || 'N/A'}
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                        <MapPin size={10} /> {firstTx.sourceDestination || 'N/A'}
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                        <Calendar size={10} /> {format(new Date(firstTx.date), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-1 sm:px-0">
-                  {categoryItems.map(item => {
-                    const currentStock = Number(item.currentStock) || 0;
-                    const minStock = Number(item.minStock) || 0;
-                    const isLow = currentStock <= minStock;
-                    const itemTxs = transactions.filter(tx => tx.itemId === item.id);
-                    
-                    const stockOutTotal = itemTxs
-                      .filter(tx => tx.type === 'OUT' || tx.type === 'SCHEDULED')
-                      .reduce((acc, tx) => acc + tx.quantity, 0);
-                    const stockInTotal = itemTxs
-                      .filter(tx => tx.type === 'IN' || tx.type === 'FACTORY_IN')
-                      .reduce((acc, tx) => acc + tx.quantity, 0);
-                    const scheduledTotal = itemTxs
-                      .filter(tx => tx.type === 'SCHEDULED')
-                      .reduce((acc, tx) => acc + tx.quantity, 0);
-
-                    return (
-                      <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-50 relative group transition-all hover:shadow-xl hover:shadow-slate-200/50">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isLow ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                            <Package size={24} />
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            {Number(item.scheduledStock) > 0 && (
-                              <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-widest">
-                                {Number(item.scheduledStock) || 0} Sch
-                              </span>
-                            )}
-                            {isLow && (
-                              <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">
-                                Low
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <h3 className="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-1 truncate">{item.name}</h3>
-                        <div className="flex items-baseline gap-1.5">
-                          <p className="text-3xl font-black text-slate-900 leading-none">{Number(item.currentStock) || 0}</p>
-                          <span className="text-11px text-slate-400 font-bold uppercase tracking-widest">{item.unit}</span>
-                        </div>
-                        
-                        <div className="mt-6 pt-5 border-t border-slate-50 grid grid-cols-3 gap-2">
-                          <div className="text-center">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">In</p>
-                            <p className="text-xs font-black text-emerald-600">{Number(stockInTotal) || 0}</p>
-                          </div>
-                          <div className="text-center border-x border-slate-50">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Out</p>
-                            <p className="text-xs font-black text-rose-600">{Number(stockOutTotal) || 0}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Sch</p>
-                            <p className="text-xs font-black text-amber-600">{Number(scheduledTotal) || 0}</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <button 
+                  onClick={() => setView('transactions')}
+                  className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all shrink-0"
+                >
+                  View Details
+                </button>
               </div>
             );
           })}
-
-        {pinnedItems.length === 0 && !isCustomizing && (
-          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center mx-1 sm:mx-0">
-            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-              <Package className="text-slate-200" size={40} />
+          {groupedScheduled.length === 0 && (
+            <div className="py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+              <Clock size={32} className="mx-auto text-slate-300 mb-3" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Scheduled Orders Found</p>
             </div>
-            <h3 className="text-slate-900 font-black uppercase tracking-tight text-lg">No Items Pinned</h3>
-            <p className="text-slate-500 text-xs font-medium mt-2">Customize your dashboard to see product-wise stats</p>
-            <button 
-              onClick={() => setIsCustomizing(true)}
-              className="mt-6 bg-white border border-slate-200 px-6 py-2.5 rounded-2xl text-slate-700 font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
-            >
-              Select Items
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Production Analytics Section */}

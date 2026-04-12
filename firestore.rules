@@ -69,8 +69,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (request.auth.token.email in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co", "general@inventorypro.app"] ||
-         request.auth.token.get('email', '') in ["data.pavan11@gmail.com", "vidhi@bharatnatural.co", "general@inventorypro.app"] ||
+        (request.auth.token.email == "data.pavan11@gmail.com" ||
+         request.auth.token.email == "vidhi@bharatnatural.co" ||
+         request.auth.token.email == "general@inventorypro.app" ||
          request.auth.uid == "EtTxydwOeIgqb7GcwoVPGECwA5s2" ||
          request.auth.uid == "bO7IEhfIcOUwZw2owvCZvK6Q8qh2" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
@@ -143,6 +144,26 @@ service cloud.firestore {
              (!('invoiceNo' in data) || data.get('invoiceNo', '') is string);
     }
 
+    function isValidLead(data) {
+      return data.get('leadDate', '') is string &&
+             data.get('salespersonName', '') is string &&
+             data.get('leadStatus', '') in ['New', 'Contacted', 'Quote Sent', 'Negotiation', 'Won', 'Lost'] &&
+             data.get('convertedToProject', '') in ['Yes', 'No'] &&
+             (!('leadSource' in data) || data.get('leadSource', '') is string) &&
+             (!('billingName' in data) || data.get('billingName', '') is string) &&
+             (!('phoneNumber' in data) || data.get('phoneNumber', '') is string) &&
+             (!('cityLocation' in data) || data.get('cityLocation', '') is string) &&
+             (!('sport' in data) || data.get('sport', '') is string) &&
+             (!('productInterestedIn' in data) || data.get('productInterestedIn', '') is string) &&
+             (!('approxArea' in data) || data.get('approxArea', 0) is number) &&
+             (!('estProjectValue' in data) || data.get('estProjectValue', 0) is number) &&
+             (!('nextFollowUp' in data) || data.get('nextFollowUp', '') is string) &&
+             (!('lastRemark' in data) || data.get('lastRemark', '') is string) &&
+             (!('projectId' in data) || data.get('projectId', '') is string) &&
+             (!('month' in data) || data.get('month', '') is string) &&
+             (!('createdAt' in data) || data.get('createdAt', '') is string);
+    }
+
     // ===============================================================
     // Match Rules
     // ===============================================================
@@ -179,6 +200,12 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['date'])
       );
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /leads/{leadId} {
+      allow read: if request.auth != null;
+      allow create, update: if isStaff() && isValidLead(request.resource.data);
+      allow delete: if isAdmin();
     }
   }
 }

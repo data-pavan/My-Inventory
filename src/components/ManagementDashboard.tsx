@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Item, Transaction, Category } from '../types';
+import { Item, Transaction, Category, OperationType } from '../types';
 import { 
   format, 
   startOfDay, 
@@ -46,6 +46,7 @@ import {
   eachDayOfInterval, 
   eachWeekOfInterval 
 } from 'date-fns';
+import { handleFirestoreError } from '../lib/firestoreErrorHandler';
 
 const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316', '#14B8A6'];
 
@@ -58,18 +59,19 @@ export default function ManagementDashboard() {
   useEffect(() => {
     const unsubItems = onSnapshot(collection(db, 'items'), (snap) => {
       setItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Item)));
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'items'));
 
     const unsubTransactions = onSnapshot(
       query(collection(db, 'transactions'), orderBy('date', 'desc')), 
       (snap) => {
         setTransactions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
-      }
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'transactions')
     );
 
     const unsubCategories = onSnapshot(collection(db, 'categories'), (snap) => {
       setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'categories'));
 
     setLoading(false);
     return () => {

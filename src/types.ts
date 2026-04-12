@@ -1,5 +1,28 @@
 export type TransactionType = 'IN' | 'OUT' | 'SCHEDULED' | 'FACTORY_IN';
 
+export type LeadStatus = 'New' | 'Contacted' | 'Quote Sent' | 'Negotiation' | 'Won' | 'Lost';
+
+export interface Lead {
+  id: string;
+  leadDate: string;
+  salespersonName: string;
+  leadSource: string;
+  billingName: string;
+  phoneNumber: string;
+  cityLocation: string;
+  sport: string;
+  productInterestedIn: string;
+  approxArea: number;
+  estProjectValue: number;
+  leadStatus: LeadStatus;
+  nextFollowUp: string;
+  lastRemark: string;
+  convertedToProject: 'Yes' | 'No';
+  projectId?: string;
+  month: string;
+  createdAt: string;
+}
+
 export interface Category {
   id: string;
   name: string;

@@ -17,6 +17,8 @@ export default function OverdueDispatchModal() {
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [reschedulingGroup, setReschedulingGroup] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<{ [key: string]: boolean }>({});
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [txToCancel, setTxToCancel] = useState<Transaction | null>(null);
 
   const toggleGroup = (groupKey: string) => {
     setExpandedGroups(prev => ({
@@ -57,33 +59,40 @@ export default function OverdueDispatchModal() {
     };
   }, [hasShown]);
 
-  const handleCancel = async (tx: Transaction) => {
-    if (!window.confirm('Are you sure you want to cancel this scheduled dispatch? Stock will be restored.')) return;
+  const handleCancel = async () => {
+    if (!txToCancel) return;
     
-    setLoading(tx.id);
+    setLoading(txToCancel.id);
     try {
       await runTransaction(db, async (transaction) => {
-        const itemRef = doc(db, 'items', tx.itemId);
+        const itemRef = doc(db, 'items', txToCancel.itemId);
         const itemSnap = await transaction.get(itemRef);
         
         if (!itemSnap.exists()) throw new Error('Item not found');
         
         const itemData = itemSnap.data() as Item;
-        const newStock = (itemData.currentStock || 0) + tx.quantity;
-        const newScheduled = (itemData.scheduledStock || 0) - tx.quantity;
+        const newStock = (itemData.currentStock || 0) + txToCancel.quantity;
+        const newScheduled = (itemData.scheduledStock || 0) - txToCancel.quantity;
 
-        transaction.delete(doc(db, 'transactions', tx.id));
+        transaction.delete(doc(db, 'transactions', txToCancel.id));
         transaction.update(itemRef, {
           currentStock: newStock,
           scheduledStock: Math.max(0, newScheduled)
         });
       });
       toast.success('Dispatch cancelled and stock restored');
+      setIsCancelModalOpen(false);
+      setTxToCancel(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'transactions');
     } finally {
       setLoading(null);
     }
+  };
+
+  const initiateCancel = (tx: Transaction) => {
+    setTxToCancel(tx);
+    setIsCancelModalOpen(true);
   };
 
   const handleReschedule = async (tx: Transaction) => {
@@ -318,7 +327,7 @@ export default function OverdueDispatchModal() {
                                   <Calendar size={14} />
                                 </button>
                                 <button
-                                  onClick={() => handleCancel(tx)}
+                                  onClick={() => initiateCancel(tx)}
                                   disabled={loading === tx.id}
                                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                                   title="Cancel Item"
@@ -373,6 +382,49 @@ export default function OverdueDispatchModal() {
           </button>
         </div>
       </div>
+
+      {/* Cancel Confirmation Modal */}
+      {isCancelModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 bg-rose-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-rose-600 text-white rounded-lg">
+                  <Trash2 size={24} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900">Cancel Dispatch</h3>
+              </div>
+              <button onClick={() => setIsCancelModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600">
+                Are you sure you want to cancel this scheduled dispatch? Stock will be restored to the inventory.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsCancelModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={!!loading}
+                  className="flex-1 bg-rose-600 text-white font-semibold py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  {loading ? (
+                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    'Confirm'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

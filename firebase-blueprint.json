@@ -53,12 +53,38 @@
         "role": { "type": "string", "enum": ["admin", "staff"], "description": "User role" }
       },
       "required": ["email", "role"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "A sales lead",
+      "type": "object",
+      "properties": {
+        "leadDate": { "type": "string", "description": "Date the lead was generated" },
+        "salespersonName": { "type": "string", "description": "Name of the salesperson" },
+        "leadSource": { "type": "string", "description": "Source of the lead" },
+        "billingName": { "type": "string", "description": "Name of the billing entity" },
+        "phoneNumber": { "type": "string", "description": "Contact phone number" },
+        "cityLocation": { "type": "string", "description": "City or location" },
+        "sport": { "type": "string", "description": "Sport category" },
+        "productInterestedIn": { "type": "string", "description": "Product of interest" },
+        "approxArea": { "type": "number", "description": "Approximate area" },
+        "estProjectValue": { "type": "number", "description": "Estimated project value" },
+        "leadStatus": { "type": "string", "enum": ["New", "Contacted", "Quote Sent", "Negotiation", "Won", "Lost"], "description": "Current status of the lead" },
+        "nextFollowUp": { "type": "string", "description": "Next follow-up date" },
+        "lastRemark": { "type": "string", "description": "Last remark or comment" },
+        "convertedToProject": { "type": "string", "enum": ["Yes", "No"], "description": "Whether converted to project" },
+        "projectId": { "type": "string", "description": "Associated Project ID" },
+        "month": { "type": "string", "description": "Month of the lead" },
+        "createdAt": { "type": "string", "description": "Timestamp of creation" }
+      },
+      "required": ["leadDate", "salespersonName", "leadStatus", "convertedToProject"]
     }
   },
   "firestore": {
     "/categories/{categoryId}": { "schema": "Category", "description": "Collection of categories" },
     "/items/{itemId}": { "schema": "Item", "description": "Collection of items" },
     "/transactions/{transactionId}": { "schema": "Transaction", "description": "Collection of transactions" },
-    "/users/{userId}": { "schema": "User", "description": "Collection of users" }
+    "/users/{userId}": { "schema": "User", "description": "Collection of users" },
+    "/leads/{leadId}": { "schema": "Lead", "description": "Collection of sales leads" }
   }
 }

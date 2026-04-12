@@ -13,7 +13,10 @@ import Transactions from './components/Transactions';
 import StockTable from './components/StockTable';
 import ManagementDashboard from './components/ManagementDashboard';
 import StockReport from './components/StockReport';
+import SiteMaterialStockReport from './components/SiteMaterialStockReport';
 import OverdueDispatchModal from './components/OverdueDispatchModal';
+import LeadAnalytics from './components/LeadAnalytics';
+import LeadManagement from './components/LeadManagement';
 
 interface AuthContextType {
   user: User | null;
@@ -92,10 +95,13 @@ export default function App() {
       case 'dashboard': return <Dashboard setView={setCurrentView} />;
       case 'management': return <ManagementDashboard />;
       case 'stock-report': return <StockReport />;
+      case 'site-material-report': return <SiteMaterialStockReport />;
+      case 'lead-analytics': return <LeadAnalytics />;
       case 'categories': return <CategoryManagement />;
       case 'items': return <ItemManagement />;
       case 'transactions': return <Transactions />;
       case 'stock': return <StockTable />;
+      case 'leads-data': return <LeadManagement />;
       default: return profile?.role === 'admin' ? <ManagementDashboard /> : <Dashboard setView={setCurrentView} />;
     }
   };
