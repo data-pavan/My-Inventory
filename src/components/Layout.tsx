@@ -47,13 +47,12 @@ export default function Layout({ children, currentView, setView }: LayoutProps) 
   }, [currentView]);
 
   const mainMenuItems = [
-    { id: 'management', label: 'Management', icon: TrendingUp, hidden: profile?.role !== 'admin' },
     { id: 'lead-analytics', label: 'Lead Analytics', icon: BarChart3 },
     { id: 'project-analytics', label: 'Project Analytics', icon: BarChart3 },
     { id: 'stock-report', label: 'Stock Report', icon: BarChart3 },
     { id: 'site-material-report', label: 'Site Material Report', icon: BarChart3 },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  ].filter(item => !item.hidden);
+  ];
 
   const settingsItems = [
     { id: 'categories', label: 'Categories', icon: Layers },

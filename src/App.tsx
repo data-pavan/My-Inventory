@@ -11,7 +11,6 @@ import CategoryManagement from './components/CategoryManagement';
 import ItemManagement from './components/ItemManagement';
 import Transactions from './components/Transactions';
 import StockTable from './components/StockTable';
-import ManagementDashboard from './components/ManagementDashboard';
 import StockReport from './components/StockReport';
 import SiteMaterialStockReport from './components/SiteMaterialStockReport';
 import OverdueDispatchModal from './components/OverdueDispatchModal';
@@ -62,7 +61,7 @@ export default function App() {
 
         // Set default view based on role
         if (userProfile.role === 'admin') {
-          setCurrentView('management');
+          setCurrentView('lead-analytics');
         } else {
           setCurrentView('dashboard');
         }
@@ -95,7 +94,6 @@ export default function App() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard': return <Dashboard setView={setCurrentView} />;
-      case 'management': return <ManagementDashboard />;
       case 'stock-report': return <StockReport />;
       case 'site-material-report': return <SiteMaterialStockReport />;
       case 'lead-analytics': return <LeadAnalytics />;
@@ -106,7 +104,7 @@ export default function App() {
       case 'stock': return <StockTable />;
       case 'leads-data': return <LeadManagement />;
       case 'projects-data': return <ProjectManagement />;
-      default: return profile?.role === 'admin' ? <ManagementDashboard /> : <Dashboard setView={setCurrentView} />;
+      default: return <Dashboard setView={setCurrentView} />;
     }
   };
 
