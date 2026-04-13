@@ -138,6 +138,7 @@ export default function ProjectAnalytics() {
         </div>
         
         <button 
+          id="toggle-financials-btn"
           onClick={() => setHideFinancials(!hideFinancials)}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
             hideFinancials 
@@ -151,8 +152,8 @@ export default function ProjectAnalytics() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+      <div id="kpi-cards-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div id="total-projects-kpi" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner">
               <TrendingUp size={24} />
@@ -164,7 +165,7 @@ export default function ProjectAnalytics() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div id="completed-projects-kpi" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
               <CheckCircle2 size={24} />
@@ -180,7 +181,7 @@ export default function ProjectAnalytics() {
 
         {!hideFinancials && (
           <>
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <div id="total-value-kpi" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center shadow-inner">
                   <DollarSign size={24} />
@@ -192,7 +193,7 @@ export default function ProjectAnalytics() {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <div id="pending-payment-kpi" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center shadow-inner">
                   <CreditCard size={24} />
@@ -208,9 +209,9 @@ export default function ProjectAnalytics() {
       </div>
 
       {/* Alerts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="alerts-grid" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {delayedProjects.length > 0 && (
-          <div className="bg-rose-50 border border-rose-100 rounded-3xl p-6">
+          <div id="delayed-projects-alert" className="bg-rose-50 border border-rose-100 rounded-3xl p-6">
             <div className="flex items-center gap-2 mb-4">
               <AlertCircle className="text-rose-600" size={20} />
               <h3 className="text-xs font-black text-rose-900 uppercase tracking-widest">Delayed Projects Alert</h3>
@@ -232,7 +233,7 @@ export default function ProjectAnalytics() {
         )}
 
         {!hideFinancials && financials.totalPending > 0 && (
-          <div className="bg-amber-50 border border-amber-100 rounded-3xl p-6">
+          <div id="high-pending-payments-alert" className="bg-amber-50 border border-amber-100 rounded-3xl p-6">
             <div className="flex items-center gap-2 mb-4">
               <CreditCard className="text-amber-600" size={20} />
               <h3 className="text-xs font-black text-amber-900 uppercase tracking-widest">High Pending Payments</h3>
@@ -258,12 +259,12 @@ export default function ProjectAnalytics() {
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="charts-grid" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status Distribution */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div id="status-distribution-chart-container" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Project Status Distribution</h3>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer id="status-distribution-rc" width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={statusData}
@@ -287,10 +288,10 @@ export default function ProjectAnalytics() {
         </div>
 
         {/* Project Trends */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div id="project-trends-chart-container" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Project Count Trends</h3>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer id="project-trends-rc" width="100%" height="100%">
               <LineChart data={trendData} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
@@ -322,10 +323,10 @@ export default function ProjectAnalytics() {
         </div>
 
         {/* Salesperson Performance */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div id="salesperson-performance-chart-container" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Salesperson Performance</h3>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer id="salesperson-performance-rc" width="100%" height="100%">
               <BarChart data={salespersonData} layout="vertical" margin={{ right: 40, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis type="number" hide allowDecimals={false} />
@@ -347,10 +348,10 @@ export default function ProjectAnalytics() {
         </div>
 
         {/* Location Distribution */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div id="location-distribution-chart-container" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Location-wise Projects</h3>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer id="location-distribution-rc" width="100%" height="100%">
               <BarChart data={locationData} margin={{ top: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
@@ -370,10 +371,10 @@ export default function ProjectAnalytics() {
         </div>
 
         {!hideFinancials && (
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <div id="pending-payment-chart-container" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Pending Payment by Project</h3>
             <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer id="pending-payment-rc" width="100%" height="100%">
                 <BarChart data={financials.pendingByProject} layout="vertical" margin={{ right: 80, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                   <XAxis type="number" hide />
@@ -403,10 +404,10 @@ export default function ProjectAnalytics() {
       </div>
 
       {!hideFinancials && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div id="high-value-projects-chart-container" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Top High Value Projects</h3>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer id="high-value-projects-rc" width="100%" height="100%">
               <BarChart data={financials.highValueProjects} margin={{ top: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 

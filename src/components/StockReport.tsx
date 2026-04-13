@@ -153,6 +153,7 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
 
   return (
     <div 
+      id={`stock-chart-container-${cat.id}`}
       ref={setNodeRef} 
       style={style}
       className={`bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col h-full ${widthClass} col-span-12 transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1`}
@@ -176,8 +177,8 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
         </div>
       </div>
       
-      <div className={`${chartHeight} w-full mt-auto`}>
-        <ResponsiveContainer width="100%" height="100%">
+      <div id={`stock-chart-wrapper-${cat.id}`} className={`${chartHeight} w-full mt-auto`}>
+        <ResponsiveContainer id={`stock-rc-${cat.id}`} width="100%" height="100%">
           <BarChart data={catItems} margin={{ top: 35, right: 10, left: -20, bottom: 60 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F8FAFC" />
             <XAxis 
@@ -401,6 +402,7 @@ export default function StockReport() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button 
+            id="reset-layout-btn"
             onClick={resetLayout}
             className="px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center gap-2 hover:bg-slate-50 transition-colors text-xs font-black text-slate-700 uppercase tracking-widest"
           >
@@ -408,17 +410,19 @@ export default function StockReport() {
             Reset Layout
           </button>
           <button 
+            id="export-report-btn"
             onClick={exportToExcel}
             className="px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center gap-2 hover:bg-slate-50 transition-colors text-xs font-black text-slate-700 uppercase tracking-widest"
           >
             <Download size={16} className="text-blue-600" />
             Export Detailed Report
           </button>
-          <div className="px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center gap-3">
+          <div id="date-selector-wrapper" className="px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center gap-3">
             <Calendar size={16} className="text-blue-600" />
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Date:</span>
               <input 
+                id="stock-report-date-input"
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
