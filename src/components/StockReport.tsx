@@ -70,7 +70,7 @@ const getColorByName = (name: string) => {
   return null;
 };
 
-const TARGET_KEYWORDS = ["pp tiles", "soft tiles", "kerb", "corner"];
+const TARGET_KEYWORDS = ["tile", "kerb", "corner", "raw material"];
 
 interface SortableChartProps {
   cat: Category;
@@ -138,15 +138,24 @@ function SortableChart({ cat, items, transactions, selectedDate, index }: Sortab
   if (catItems.length === 0) return null;
 
   // Determine width and height based on category name
-  const isTile = cat.name.toLowerCase().includes('tile');
-  const widthClass = isTile ? "lg:col-span-3" : "lg:col-span-2";
-  const chartHeight = isTile ? "h-[340px]" : "h-[300px]";
+  const name = cat.name.toLowerCase();
+  const isTile = name.includes('tile');
+  const isRawMaterial = name.includes('raw material');
+  const isKerbOrCorner = name.includes('kerb') || name.includes('corner');
+  
+  const widthClass = isRawMaterial 
+    ? "lg:col-span-12" 
+    : (isTile ? "lg:col-span-6" : (isKerbOrCorner ? "lg:col-span-4" : "lg:col-span-4"));
+    
+  const chartHeight = isRawMaterial 
+    ? "h-[380px]" 
+    : (isTile ? "h-[340px]" : "h-[300px]");
 
   return (
     <div 
       ref={setNodeRef} 
       style={style}
-      className={`bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col h-full ${widthClass} col-span-6 transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1`}
+      className={`bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-col h-full ${widthClass} col-span-12 transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1`}
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
@@ -275,31 +284,31 @@ export default function StockReport() {
       const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
       setCategories(cats);
       
-      // Initialize order if not set
-      if (orderedCategoryIds.length === 0) {
-        const filtered = cats.filter(cat => 
-          TARGET_KEYWORDS.some(keyword => cat.name.toLowerCase().includes(keyword))
-        );
+      // Always calculate the default order based on weights
+      const filtered = cats.filter(cat => 
+        TARGET_KEYWORDS.some(keyword => cat.name.toLowerCase().includes(keyword))
+      );
+      
+      const sorted = [...filtered].sort((a, b) => {
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
         
-        // Sort according to user request: PP Tiles, Soft Tiles, then Kerbs/Corner
-        const sorted = [...filtered].sort((a, b) => {
-          const aName = a.name.toLowerCase();
-          const bName = b.name.toLowerCase();
-          
-          const getWeight = (name: string) => {
-            if (name.includes('pp tile')) return 1;
-            if (name.includes('soft tile')) return 2;
-            if (name.includes('kerb male')) return 3;
-            if (name.includes('kerb female')) return 4;
-            if (name.includes('corner')) return 5;
-            return 10;
-          };
-          
-          return getWeight(aName) - getWeight(bName);
-        });
+        const getWeight = (name: string) => {
+          const n = name.toLowerCase();
+          if (n.includes('pp tile')) return 1;
+          if (n.includes('soft tile')) return 2;
+          if (n.includes('kerb') && n.includes('male')) return 3;
+          if (n.includes('kerb') && n.includes('female')) return 4;
+          if (n.includes('corner')) return 5;
+          if (n.includes('raw material')) return 6;
+          return 10;
+        };
         
-        setOrderedCategoryIds(sorted.map(c => c.id));
-      }
+        return getWeight(aName) - getWeight(bName);
+      });
+      
+      // Only set if not already set or if explicitly resetting
+      setOrderedCategoryIds(prev => prev.length === 0 ? sorted.map(c => c.id) : prev);
     });
 
     const unsubTransactions = onSnapshot(
@@ -344,11 +353,13 @@ export default function StockReport() {
       const aName = a.name.toLowerCase();
       const bName = b.name.toLowerCase();
       const getWeight = (name: string) => {
-        if (name.includes('pp tile')) return 1;
-        if (name.includes('soft tile')) return 2;
-        if (name.includes('kerb male')) return 3;
-        if (name.includes('kerb female')) return 4;
-        if (name.includes('corner')) return 5;
+        const n = name.toLowerCase();
+        if (n.includes('pp tile')) return 1;
+        if (n.includes('soft tile')) return 2;
+        if (n.includes('kerb') && n.includes('male')) return 3;
+        if (n.includes('kerb') && n.includes('female')) return 4;
+        if (n.includes('corner')) return 5;
+        if (n.includes('raw material')) return 6;
         return 10;
       };
       return getWeight(aName) - getWeight(bName);
@@ -427,7 +438,7 @@ export default function StockReport() {
           items={orderedCategoryIds}
           strategy={rectSortingStrategy}
         >
-          <div className="grid grid-cols-6 gap-6">
+          <div className="grid grid-cols-12 gap-6">
             {filteredCategories.map((cat, index) => (
               <SortableChart 
                 key={cat.id} 
